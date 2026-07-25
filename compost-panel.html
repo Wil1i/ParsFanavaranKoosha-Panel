@@ -1,0 +1,1179 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>پنل مدیریت کارخانه کمپوست</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700;800;900&display=swap');
+
+  :root{
+    --bg:#f0eee4; --surface:#ffffff; --border:#e6e0cc; --soft:#f6f4e9;
+    --primary:#3f5d3a; --primary-dark:#2f4a2b;
+    --text:#2b2822; --muted:#6b6350; --muted2:#9a917c;
+    --warn-bg:#fbf1e2; --warn-text:#8a5e1f;
+    --danger-bg:#fbeae6; --danger-text:#a13f26;
+    --good-bg:#eef4e8;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background:var(--bg); color:var(--text);
+    font-family:'Vazirmatn','Tahoma',sans-serif;
+    font-size:14px; line-height:1.6; min-height:100vh;
+  }
+  ::-webkit-scrollbar{ width:8px; height:8px; }
+  ::-webkit-scrollbar-thumb{ background:#d3ccb4; border-radius:4px; }
+
+  .wrap{ max-width:1080px; margin:0 auto; padding:0 16px; }
+  header.top{ background:var(--primary); color:#fff; position:relative; margin-bottom: 7px; }
+  .top-inner{ display:flex; align-items:center; justify-content:space-between; padding:18px 0; gap:12px; }
+  .top-inner h1{ margin:0; font-size:20px; font-weight:800; }
+  .top-inner p{ margin:4px 0 0; font-size:12.5px; color:#cfe0c4; }
+  .top-right{ display:flex; align-items:center; gap:10px; flex-shrink:0; }
+  .logo-badge{
+    width:44px; height:44px; border-radius:50%; display:grid; place-items:center;
+    font-size:18px; font-weight:900; flex-shrink:0;
+    background:linear-gradient(135deg,#8fae5f,#4a3728);
+  }
+  .hamburger{
+    display:none; width:40px; height:40px; border-radius:10px; border:none; cursor:pointer;
+    background:rgba(255,255,255,.12); flex-direction:column; align-items:center; justify-content:center; gap:4px;
+  }
+  .hamburger:hover{ background:rgba(255,255,255,.2); }
+  .hamburger .bar{ display:block; width:19px; height:2px; background:#fff; border-radius:2px; transition:.2s; }
+  .hamburger.open .bar:nth-child(1){ transform:translateY(6px) rotate(45deg); }
+  .hamburger.open .bar:nth-child(2){ opacity:0; }
+  .hamburger.open .bar:nth-child(3){ transform:translateY(-6px) rotate(-45deg); }
+
+  nav.tabs{ display:flex; gap:4px; }
+  nav.tabs button{
+    border:none; cursor:pointer; padding:10px 16px; font-size:13.5px; font-weight:600;
+    border-radius:10px 10px 0 0; background:transparent; color:#dfeacf;
+    font-family:inherit; transition:.15s; width:100%; text-align:right;
+  }
+  nav.tabs button.active{ background:var(--bg); color:var(--text); }
+  nav.tabs button:not(.active):hover{ background:rgba(255,255,255,.12); }
+
+  main{ padding:24px 0 60px; }
+
+  .stat-row{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:24px; }
+  .stat-row.two{ grid-template-columns:repeat(2,1fr); }
+  .stat-row.four{ grid-template-columns:repeat(4,1fr); }
+
+  @media(max-width:640px){
+    .hamburger{ display:flex; }
+    .top-inner h1{ font-size:17px; }
+    .top-inner p{ display:none; }
+    nav.tabs{
+      display:none; flex-direction:column; position:absolute; inset-inline:0; top:100%;
+      background:var(--primary-dark); padding:8px 16px 14px; gap:2px; z-index:45;
+      box-shadow:0 12px 24px rgba(0,0,0,.18);
+    }
+    nav.tabs.open{ display:flex; }
+    nav.tabs button{ border-radius:10px; padding:12px 14px; color:#e9f0e0; }
+    nav.tabs button.active{ background:rgba(255,255,255,.16); color:#fff; }
+  }
+  @media(max-width:520px){
+    .stat-row{ grid-template-columns:repeat(2,1fr); }
+    .stat-row.four{ grid-template-columns:repeat(2,1fr); }
+  }
+  .chip{ border:1px solid var(--border); border-radius:14px; padding:14px 16px; background:var(--surface); }
+  .chip.good{ background:var(--good-bg); border-color:#d3e4c4; }
+  .chip.warn{ background:var(--warn-bg); border-color:#eddcb3; }
+  .chip .v{ font-size:20px; font-weight:800; line-height:1; }
+  .chip.good .v{ color:var(--primary); }
+  .chip.warn .v{ color:var(--warn-text); }
+  .chip .l{ font-size:12px; margin-top:6px; opacity:.8; }
+
+  .section-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; flex-wrap:wrap; gap:10px; }
+  .section-head h2{ font-size:16px; font-weight:800; margin:0; }
+
+  .btn{
+    border:none; cursor:pointer; border-radius:10px; font-weight:600; font-family:inherit;
+    padding:10px 16px; font-size:14px; display:inline-flex; align-items:center; gap:6px;
+    transition:.15s;
+  }
+  .btn.small{ padding:6px 12px; font-size:12.5px; border-radius:8px; }
+  .btn.primary{ background:var(--primary); color:#fff; }
+  .btn.primary:hover{ background:var(--primary-dark); }
+  .btn.secondary{ background:#efe9d6; color:var(--primary); }
+  .btn.secondary:hover{ background:#e6dfc6; }
+  .btn.danger{ background:var(--danger-bg); color:var(--danger-text); }
+  .btn.danger:hover{ background:#f6d9d1; }
+  .btn.ghost{ background:transparent; color:var(--muted); }
+  .btn.ghost:hover{ background:#efe9d6; }
+  .btn.full{ width:100%; justify-content:center; }
+
+  .empty{
+    text-align:center; padding:60px 20px; border:1.5px dashed var(--border);
+    border-radius:18px; background:rgba(255,255,255,.6);
+  }
+  .empty p{ color:var(--muted); margin:0 0 14px; }
+
+  .grid-cards{ display:grid; grid-template-columns:repeat(auto-fill,minmax(270px,1fr)); gap:16px; }
+  .card{
+    background:var(--surface); border:1px solid var(--border); border-radius:18px; padding:16px;
+    display:flex; flex-direction:column; gap:12px; cursor:pointer; transition:.15s;
+  }
+  .card:hover{ box-shadow:0 6px 18px rgba(43,40,34,.08); }
+  .card-top{ display:flex; align-items:flex-start; justify-content:space-between; gap:8px; }
+  .card-top h3{ margin:0; font-size:15px; font-weight:700; line-height:1.4; }
+
+  .badge{ font-size:11px; font-weight:800; padding:4px 10px; border-radius:999px; white-space:nowrap; }
+  .badge.ready{ background:var(--primary); color:#fff; }
+  .badge.pending{ background:#efe4c9; color:var(--warn-text); }
+
+  .gauge-label{ display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; font-size:12px; }
+  .gauge-label .a{ color:var(--muted); font-weight:500; }
+  .gauge-label .b{ color:var(--muted2); }
+  .gauge-track{ height:10px; border-radius:999px; background:#e9e3cf; overflow:hidden; }
+  .gauge-fill{ height:100%; border-radius:999px; background:linear-gradient(90deg,#8fae5f 0%,#6f8f4d 35%,#7a5c3e 75%,#4a3728 100%); }
+
+  .mini-stats{ display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .mini-box{ background:var(--soft); border-radius:10px; padding:8px 10px; }
+  .mini-box .l{ font-size:12px; color:var(--muted2); }
+  .mini-box .v{ font-size:15px; font-weight:800; }
+  .mini-box .v.accent{ color:var(--primary); }
+
+  .back-link{ background:none; border:none; cursor:pointer; color:var(--primary); font-weight:700; font-size:13.5px; padding:0; margin-bottom:16px; font-family:inherit; }
+  .back-link:hover{ text-decoration:underline; }
+
+  .panel{ background:var(--surface); border:1px solid var(--border); border-radius:18px; padding:20px; margin-bottom:20px; }
+  .panel-head{ display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+  .panel-head h2{ font-size:18px; font-weight:800; margin:0; }
+  .panel-head .meta{ font-size:12.5px; color:var(--muted); margin-top:4px; }
+  .panel-head .note{ font-size:12.5px; color:var(--muted2); margin-top:4px; }
+  .actions{ display:flex; gap:8px; }
+
+  .two-col{ display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+  @media(max-width:860px){ .two-col{ grid-template-columns:1fr; } }
+
+  .list-card{ background:var(--surface); border:1px solid var(--border); border-radius:18px; padding:16px; }
+  .list-card-head{ display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:12px; gap:8px;}
+  .list-card-head h3{ margin:0; font-size:14.5px; font-weight:800; }
+  .list-card-head .sum{ font-size:12px; color:var(--muted2); margin-top:2px; }
+  .empty-mini{ text-align:center; padding:24px 0; color:var(--muted2); font-size:13px; }
+
+  .invoice-row{ border:1px solid #eee8d6; border-radius:10px; padding:10px 12px; margin-bottom:8px; font-size:13px; }
+  .invoice-row .r1{ display:flex; align-items:center; justify-content:space-between; }
+  .invoice-row .r1 .name{ font-weight:700; }
+  .invoice-row .r1 .date{ color:var(--muted); font-size:12.5px; }
+  .invoice-row .r2{ display:flex; align-items:center; justify-content:space-between; margin-top:4px; color:var(--muted); }
+  .invoice-row .r2 .tot{ font-weight:800; color:var(--text); }
+  .invoice-row .r3{ font-size:12px; color:var(--muted2); margin-top:4px; }
+  .invoice-row .r4{ display:flex; gap:6px; margin-top:8px; }
+
+  table.wh{ width:100%; border-collapse:collapse; font-size:13.5px; }
+  table.wh thead tr{ background:var(--soft); color:var(--muted); font-size:12.5px; }
+  table.wh th{ text-align:right; padding:12px 14px; font-weight:700; }
+  table.wh td{ padding:12px 14px; border-top:1px solid #eee8d6; }
+  table.wh .stock{ font-weight:800; }
+  .stock-ok{ color:var(--primary); }
+  .stock-low{ color:var(--warn-text); }
+  .stock-out{ color:var(--danger-text); }
+  .wh-actions{ display:flex; gap:6px; flex-wrap:wrap; }
+  .wh-card-wrap{ background:var(--surface); border:1px solid var(--border); border-radius:18px; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+  table.wh{ min-width:640px; }
+
+  .save-err{ margin-bottom:16px; font-size:13px; background:var(--danger-bg); color:var(--danger-text); border-radius:10px; padding:10px 14px; }
+
+  /* modal */
+  .overlay{
+    position:fixed; inset:0; z-index:50; background:rgba(27,26,20,.5); backdrop-filter:blur(2px);
+    display:flex; align-items:center; justify-content:center; padding:16px;
+  }
+  .modal{
+    background:#faf8f1; width:100%; max-width:480px; max-height:92vh; overflow-y:auto;
+    border-radius:18px; box-shadow:0 20px 60px rgba(0,0,0,.25); border:1px solid var(--border);
+  }
+  .modal.wide{ max-width:640px; }
+  .modal-head{
+    position:sticky; top:0; background:#faf8f1; display:flex; align-items:center; justify-content:space-between;
+    padding:16px 20px; border-bottom:1px solid var(--border);
+  }
+  .modal-head h3{ margin:0; font-size:16px; font-weight:800; }
+  .modal-close{ width:32px; height:32px; border-radius:50%; border:none; background:transparent; cursor:pointer; font-size:18px; color:var(--muted); }
+  .modal-close:hover{ background:#efe9d6; }
+  .modal-body{ padding:20px; }
+
+  .field{ display:block; margin-bottom:14px; }
+  .field .lbl{ display:block; font-size:13px; font-weight:600; color:var(--muted); margin-bottom:6px; }
+  .field .hint{ display:block; font-size:11px; color:var(--muted2); margin-top:5px; }
+  .inp, select.inp, textarea.inp{
+    width:100%; border:1px solid #d9d2bd; background:#fff; border-radius:10px; padding:9px 12px;
+    font-size:14px; color:var(--text); font-family:inherit; outline:none; transition:.15s;
+  }
+  .inp:focus{ border-color:var(--primary); box-shadow:0 0 0 3px rgba(63,93,58,.12); }
+  textarea.inp{ resize:vertical; }
+  .row2{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .total-preview{ font-size:13px; color:var(--muted); margin-bottom:14px; }
+  .total-preview b{ color:var(--text); }
+  .modal-actions{ display:flex; gap:8px; margin-top:6px; }
+
+  .loading-screen{ min-height:100vh; display:grid; place-items:center; color:var(--muted); }
+
+  /* login screen */
+  .login-wrap{ min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px; }
+  .login-card{
+    width:100%; max-width:380px; background:var(--surface); border:1px solid var(--border);
+    border-radius:20px; padding:28px 26px; box-shadow:0 10px 30px rgba(43,40,34,.08);
+  }
+  .login-logo{
+    width:56px; height:56px; border-radius:16px; display:grid; place-items:center; font-size:24px;
+    background:linear-gradient(135deg,#8fae5f,#4a3728); margin:0 auto 16px;
+  }
+  .login-card h1{ font-size:17px; text-align:center; margin:0 0 4px; }
+  .login-card p.sub{ font-size:12.5px; text-align:center; color:var(--muted2); margin:0 0 22px; }
+  .login-err{ font-size:13px; background:var(--danger-bg); color:var(--danger-text); border-radius:10px; padding:9px 12px; margin-bottom:14px; }
+
+  /* header user badge */
+  .user-badge{ display:flex; align-items:center; gap:10px; }
+  .user-badge .who{ text-align:left; }
+  .user-badge .name{ font-size:12.5px; font-weight:700; }
+  .user-badge .role{ font-size:11px; color:#cfe0c4; }
+  .logout-btn{
+    border:none; cursor:pointer; background:rgba(255,255,255,.14); color:#fff; border-radius:8px;
+    padding:7px 12px; font-size:12px; font-family:inherit; font-weight:600;
+  }
+  .logout-btn:hover{ background:rgba(255,255,255,.24); }
+
+  .spin{
+    width:16px; height:16px; border-radius:50%; border:2px solid rgba(63,93,58,.25);
+    border-top-color:var(--primary); display:inline-block; animation:spin .7s linear infinite; vertical-align:middle;
+  }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+  .btn[disabled]{ opacity:.6; cursor:default; }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <div class="loading-screen" id="loading">در حال بارگذاری…</div>
+</div>
+<div id="modal-root"></div>
+
+<script>
+/* =====================================================================
+   پنل مدیریت کارخانه کمپوست — نسخه متصل به بک‌اند (Express + Sequelize + MySQL)
+   قبل از استفاده، آدرس API_BASE را با آدرس سرور خودتان جایگزین کنید.
+   ===================================================================== */
+
+const API_BASE = "http://localhost:4000/api"; // TODO: آدرس بک‌اند خودتان را اینجا بگذارید
+
+const UNITS = ["کیلوگرم", "تن", "کیسه", "متر مکعب"];
+
+let AUTH = { token: null, user: null };
+
+/* --- نگهداری نشست ورود در localStorage تا با رفرش صفحه خارج نشوید ---
+   نکته: اگر این فایل داخل پیش‌نمایش آرتیفکت (artifact) کلود باز شود، localStorage
+   کار نمی‌کند و مرورگر آن را نادیده می‌گیرد؛ برای استفاده‌ی واقعی، فایل را دانلود و
+   در سرور/میزبان خودتان اجرا کنید تا نشست ورود روزانه به‌درستی حفظ شود. */
+const AUTH_STORAGE_KEY = "compost-panel-auth-v1";
+
+function saveAuthToStorage(){
+  try{ localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(AUTH)); }catch(e){ /* storage unavailable */ }
+}
+function loadAuthFromStorage(){
+  try{
+    const raw = localStorage.getItem(AUTH_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  }catch(e){ return null; }
+}
+function clearAuthStorage(){
+  try{ localStorage.removeItem(AUTH_STORAGE_KEY); }catch(e){ /* storage unavailable */ }
+}
+let DB = { batches: [], items: [], users: [] };
+let UI = {
+  tab: null,
+  openBatchId: null,
+  batchDetail: null,
+  menuOpen: false,
+  saveError: "",
+  loginError: "",
+  busy: false,
+};
+
+/* ===================== helpers ===================== */
+
+function toNum(v){ const n = parseFloat(v); return isNaN(n) ? 0 : n; }
+function fmt(n){ return (Math.round((toNum(n) + Number.EPSILON) * 100) / 100).toLocaleString("fa-IR"); }
+function fmtDate(iso){
+  if(!iso) return "—";
+  try{ return new Date(iso).toLocaleDateString("fa-IR", { year:"numeric", month:"2-digit", day:"2-digit" }); }
+  catch(e){ return iso; }
+}
+function esc(s){
+  return String(s ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+}
+function todayISO(){ return new Date().toISOString().slice(0,10); }
+
+/* ===================== API client ===================== */
+
+async function api(path, opts = {}){
+  const headers = { "Content-Type": "application/json" };
+  if(AUTH.token) headers["Authorization"] = "Bearer " + AUTH.token;
+
+  let res;
+  try{
+    res = await fetch(API_BASE + path, {
+      method: opts.method || "GET",
+      headers,
+      body: opts.body ? JSON.stringify(opts.body) : undefined,
+    });
+  }catch(networkErr){
+    throw new Error("اتصال به سرور برقرار نشد. آدرس API_BASE و روشن بودن بک‌اند را بررسی کنید.");
+  }
+
+  if(res.status === 401){
+    AUTH.token = null; AUTH.user = null;
+    clearAuthStorage();
+    UI.loginError = "نشست شما منقضی شده یا نامعتبر است. دوباره وارد شوید.";
+    render();
+    throw new Error(UI.loginError);
+  }
+
+  if(res.status === 204) return null;
+
+  let data = null;
+  try{ data = await res.json(); }catch(e){ /* empty body */ }
+
+  if(!res.ok){
+    throw new Error((data && data.message) || "خطایی رخ داد.");
+  }
+  return data;
+}
+
+/* ===================== auth ===================== */
+
+function accessibleTabs(){
+  const u = AUTH.user;
+  if(!u) return [];
+  const tabs = [];
+  if(u.isAdmin || u.canAccessBatches) tabs.push({ key:"batches", label:"کشت‌ها" });
+  if(u.isAdmin || u.canAccessWarehouse) tabs.push({ key:"warehouse", label:"انبار کالا" });
+  if(u.isAdmin) tabs.push({ key:"users", label:"کاربران" });
+  return tabs;
+}
+
+async function afterLogin(){
+  const tabs = accessibleTabs();
+  if(tabs.length === 0){
+    UI.loginError = "این کاربر به هیچ بخشی دسترسی ندارد. با مدیر سیستم تماس بگیرید.";
+    AUTH = { token:null, user:null };
+    render();
+    return;
+  }
+  UI.tab = tabs[0].key;
+  UI.saveError = "";
+  await loadForTab(UI.tab);
+}
+
+function logout(){
+  AUTH = { token:null, user:null };
+  clearAuthStorage();
+  DB = { batches:[], items:[], users:[] };
+  UI = { tab:null, openBatchId:null, batchDetail:null, menuOpen:false, saveError:"", loginError:"", busy:false };
+  render();
+}
+
+async function loadForTab(tab){
+  try{
+    if(tab === "batches") DB.batches = await api("/batches");
+    else if(tab === "warehouse") DB.items = await api("/items");
+    else if(tab === "users") DB.users = await api("/users");
+    UI.saveError = "";
+  }catch(err){
+    UI.saveError = err.message;
+  }
+  render();
+}
+
+async function reloadBatchAndList(batchId){
+  try{
+    const [detail, list] = await Promise.all([ api("/batches/" + batchId), api("/batches") ]);
+    UI.batchDetail = detail;
+    DB.batches = list;
+    UI.saveError = "";
+  }catch(err){
+    UI.saveError = err.message;
+  }
+  render();
+}
+
+/* ===================== rendering: shell ===================== */
+
+function render(){
+  const app = document.getElementById("app");
+  if(!AUTH.token){
+    renderLoginScreen(app);
+    return;
+  }
+  renderApp(app);
+}
+
+function renderLoginScreen(app){
+  app.innerHTML = `
+    <div class="login-wrap">
+      <div class="login-card">
+        <div class="login-logo">🌱</div>
+        <h1>پنل مدیریت کارخانه کمپوست</h1>
+        <p class="sub">برای ورود، نام کاربری و کلمه عبور خود را وارد کنید</p>
+        ${UI.loginError ? `<div class="login-err">${esc(UI.loginError)}</div>` : ""}
+        <form id="login-form">
+          <label class="field"><span class="lbl">نام کاربری</span><input class="inp" id="l-username" autocomplete="username" /></label>
+          <label class="field"><span class="lbl">کلمه عبور</span><input class="inp" type="password" id="l-password" autocomplete="current-password" /></label>
+          <button class="btn primary full" type="submit" ${UI.busy ? "disabled" : ""}>
+            ${UI.busy ? `<span class="spin"></span> در حال ورود…` : "ورود"}
+          </button>
+        </form>
+      </div>
+    </div>
+  `;
+  document.getElementById("login-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const username = document.getElementById("l-username").value.trim();
+    const password = document.getElementById("l-password").value;
+    if(!username || !password) return;
+    UI.busy = true; UI.loginError = "";
+    render();
+    try{
+      const data = await api("/auth/login", { method:"POST", body:{ username, password } });
+      AUTH.token = data.token;
+      AUTH.user = data.user;
+      saveAuthToStorage();
+      UI.busy = false;
+      await afterLogin();
+    }catch(err){
+      UI.busy = false;
+      UI.loginError = err.message || "خطا در ورود";
+      render();
+    }
+  });
+}
+
+function renderApp(app){
+  const tabs = accessibleTabs();
+
+  app.innerHTML = `
+    <header class="top">
+      <div class="wrap top-inner">
+        <div>
+          <h1>پنل مدیریت کارخانه کمپوست</h1>
+          <p>مدیریت کشت‌ها، فاکتورها و انبار</p>
+        </div>
+        <div class="top-right">
+          <button class="hamburger ${UI.menuOpen ? "open" : ""}" data-action="toggle-menu" aria-label="باز کردن منو">
+            <span class="bar"></span><span class="bar"></span><span class="bar"></span>
+          </button>
+          <div class="user-badge">
+            <div class="who">
+              <div class="name">${esc(AUTH.user.fullName)}</div>
+              <div class="role">${esc(AUTH.user.role || "")}</div>
+            </div>
+            <button class="logout-btn" data-action="logout">خروج</button>
+          </div>
+          <div class="logo-badge">🌱</div>
+        </div>
+      </div>
+      <div class="wrap">
+        <nav class="tabs ${UI.menuOpen ? "open" : ""}">
+          ${tabs.map(t => `<button data-action="set-tab" data-tab="${t.key}" class="${UI.tab===t.key ? 'active':''}">${t.label}</button>`).join("")}
+        </nav>
+      </div>
+    </header>
+    <main class="wrap">
+      ${UI.saveError ? `<div class="save-err">${esc(UI.saveError)}</div>` : ""}
+      ${renderTabContent()}
+    </main>
+  `;
+}
+
+function renderTabContent(){
+  if(UI.tab === "batches"){
+    return UI.openBatchId ? renderBatchDetail() : renderBatchesTab();
+  }
+  if(UI.tab === "warehouse") return renderWarehouseTab();
+  if(UI.tab === "users") return renderUsersTab();
+  return "";
+}
+
+/* ===================== batches ===================== */
+
+function renderGauge(b){
+  return `
+    <div>
+      <div class="gauge-label">
+        <span class="a">${b.isReady ? `آماده شده — ${fmt(Math.abs(b.daysRemaining))} روز پیش` : `${fmt(b.daysRemaining)} روز تا آماده شدن`}</span>
+        <span class="b">روز ${fmt(b.daysElapsed)} از ${fmt(b.readyDays)}</span>
+      </div>
+      <div class="gauge-track"><div class="gauge-fill" style="width:${b.progressPct}%"></div></div>
+    </div>
+  `;
+}
+
+function renderBadge(b){
+  return b.isReady
+    ? `<span class="badge ready">آماده برداشت</span>`
+    : `<span class="badge pending">در حال آماده‌سازی</span>`;
+}
+
+function renderBatchesTab(){
+  const summary = {
+    activeBatches: DB.batches.filter(b => !b.isReady).length,
+    readyBatches: DB.batches.filter(b => b.isReady).length,
+    totalRevenue: DB.batches.reduce((s,b) => s + toNum(b.revenue), 0),
+  };
+  return `
+    <div class="stat-row">
+      <div class="chip"><div class="v">${fmt(summary.activeBatches)}</div><div class="l">کشت در حال آماده‌سازی</div></div>
+      <div class="chip good"><div class="v">${fmt(summary.readyBatches)}</div><div class="l">آماده برداشت</div></div>
+      <div class="chip warn"><div class="v">${fmt(summary.totalRevenue)}</div><div class="l">جمع فروش (تومان)</div></div>
+    </div>
+    <div class="section-head">
+      <h2>لیست کشت‌ها</h2>
+      <button class="btn primary" data-action="new-batch">+ کشت جدید</button>
+    </div>
+    ${DB.batches.length === 0 ? `
+      <div class="empty">
+        <p>هنوز کشتی ثبت نشده است.</p>
+        <button class="btn primary" data-action="new-batch">ثبت اولین کشت</button>
+      </div>` : `
+      <div class="grid-cards">
+        ${DB.batches.map(renderBatchCard).join("")}
+      </div>`}
+  `;
+}
+
+function renderBatchCard(b){
+  return `
+    <div class="card" data-action="open-batch" data-id="${b.id}">
+      <div class="card-top">
+        <h3>${esc(b.name)}</h3>
+        ${renderBadge(b)}
+      </div>
+      ${renderGauge(b)}
+      <div class="mini-stats">
+        <div class="mini-box">
+          <div class="l">باقیمانده قابل فروش</div>
+          <div class="v accent">${fmt(b.remaining)} ${esc(b.unit)}</div>
+        </div>
+        <div class="mini-box">
+          <div class="l">تولید کل</div>
+          <div class="v">${fmt(b.productionQty)} ${esc(b.unit)}</div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderBatchDetail(){
+  if(!UI.batchDetail){
+    return `
+      <button class="back-link" data-action="back-to-batches">→ بازگشت به لیست کشت‌ها</button>
+      <div class="empty"><p><span class="spin"></span> در حال بارگذاری اطلاعات کشت…</p></div>
+    `;
+  }
+  const b = UI.batchDetail;
+  return `
+    <button class="back-link" data-action="back-to-batches">→ بازگشت به لیست کشت‌ها</button>
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+            <h2>${esc(b.name)}</h2>
+            ${renderBadge(b)}
+          </div>
+          <div class="meta">شروع: ${fmtDate(b.startDate)} · آماده شدن: ${fmtDate(b.readyDate)}</div>
+          ${b.note ? `<div class="note">${esc(b.note)}</div>` : ""}
+        </div>
+        <div class="actions">
+          <button class="btn small secondary" data-action="edit-batch" data-id="${b.id}">ویرایش</button>
+          <button class="btn small danger" data-action="delete-batch" data-id="${b.id}">حذف کشت</button>
+        </div>
+      </div>
+      <div style="margin-top:16px;">${renderGauge(b)}</div>
+      <div class="stat-row four" style="margin-top:16px;margin-bottom:0;">
+        <div class="chip"><div class="v" style="font-size:16px;">${fmt(b.productionQty)} ${esc(b.unit)}</div><div class="l">تولید کل</div></div>
+        <div class="chip"><div class="v" style="font-size:16px;">${fmt(b.soldQty)} ${esc(b.unit)}</div><div class="l">فروخته شده</div></div>
+        <div class="chip good"><div class="v" style="font-size:16px;">${fmt(b.remaining)} ${esc(b.unit)}</div><div class="l">باقیمانده قابل فروش</div></div>
+        <div class="chip ${b.profit >= 0 ? 'good' : 'warn'}"><div class="v" style="font-size:16px;">${fmt(b.profit)}</div><div class="l">سود ناخالص (تومان)</div></div>
+      </div>
+    </div>
+
+    <div class="two-col">
+      <div class="list-card">
+        <div class="list-card-head">
+          <div>
+            <h3>فاکتورهای خرید</h3>
+            <div class="sum">جمع: ${fmt(b.purchaseCost)} تومان</div>
+          </div>
+          <button class="btn small primary" data-action="new-purchase" data-batch-id="${b.id}">+ فاکتور خرید</button>
+        </div>
+        ${(!b.purchases || b.purchases.length === 0) ? `<div class="empty-mini">فاکتور خریدی ثبت نشده است.</div>` :
+          b.purchases.slice().sort((a,x)=> a.date < x.date ? 1 : -1).map(p => `
+            <div class="invoice-row">
+              <div class="r1"><span class="name">${esc(p.itemName)}</span><span class="date">${fmtDate(p.date)}</span></div>
+              <div class="r2"><span>${fmt(p.qty)} ${esc(p.unit)} × ${fmt(p.unitPrice)} تومان</span><span class="tot">${fmt(p.total)} تومان</span></div>
+              ${p.supplier ? `<div class="r3">تامین‌کننده: ${esc(p.supplier)}</div>` : ""}
+              <div class="r4">
+                <button class="btn small ghost" data-action="edit-purchase" data-id="${p.id}">ویرایش</button>
+                <button class="btn small danger" data-action="delete-purchase" data-id="${p.id}" data-batch-id="${b.id}">حذف</button>
+              </div>
+            </div>
+          `).join("")}
+      </div>
+
+      <div class="list-card">
+        <div class="list-card-head">
+          <div>
+            <h3>فاکتورهای فروش</h3>
+            <div class="sum">جمع: ${fmt(b.revenue)} تومان</div>
+          </div>
+          <button class="btn small primary" data-action="new-sale" data-batch-id="${b.id}">+ فاکتور فروش</button>
+        </div>
+        ${(!b.sales || b.sales.length === 0) ? `<div class="empty-mini">فاکتور فروشی ثبت نشده است.</div>` :
+          b.sales.slice().sort((a,x)=> a.date < x.date ? 1 : -1).map(s => `
+            <div class="invoice-row">
+              <div class="r1"><span class="name">${esc(s.customer || "مشتری بدون نام")}</span><span class="date">${fmtDate(s.date)}</span></div>
+              <div class="r2"><span>${fmt(s.qty)} ${esc(b.unit)} × ${fmt(s.unitPrice)} تومان</span><span class="tot">${fmt(s.total)} تومان</span></div>
+              <div class="r4">
+                <button class="btn small ghost" data-action="edit-sale" data-id="${s.id}">ویرایش</button>
+                <button class="btn small danger" data-action="delete-sale" data-id="${s.id}" data-batch-id="${b.id}">حذف</button>
+              </div>
+            </div>
+          `).join("")}
+      </div>
+    </div>
+  `;
+}
+
+/* ===================== warehouse ===================== */
+
+function renderWarehouseTab(){
+  const lowStock = DB.items.filter(it => toNum(it.stock) <= 10).length;
+  return `
+    <div class="stat-row two">
+      <div class="chip"><div class="v">${fmt(DB.items.length)}</div><div class="l">تعداد اقلام انبار</div></div>
+      <div class="chip warn"><div class="v">${fmt(lowStock)}</div><div class="l">اقلام رو به اتمام (≤۱۰)</div></div>
+    </div>
+    <div class="section-head">
+      <h2>موجودی کالاهای انبار</h2>
+      <button class="btn primary" data-action="new-item">+ کالای جدید</button>
+    </div>
+    ${DB.items.length === 0 ? `
+      <div class="empty">
+        <p>هنوز کالایی در انبار ثبت نشده است.</p>
+        <button class="btn primary" data-action="new-item">افزودن کالا</button>
+      </div>` : `
+      <div class="wh-card-wrap">
+        <table class="wh">
+          <thead><tr><th>نام کالا</th><th>واحد</th><th>موجودی</th><th>محل نگهداری</th><th>عملیات</th></tr></thead>
+          <tbody>
+            ${DB.items.map(it => `
+              <tr>
+                <td>${esc(it.name)}</td>
+                <td style="color:var(--muted)">${esc(it.unit)}</td>
+                <td><span class="stock ${toNum(it.stock) <= 0 ? 'stock-out' : (toNum(it.stock) <= 10 ? 'stock-low' : 'stock-ok')}">${fmt(it.stock)}</span></td>
+                <td style="color:var(--muted)">${it.location ? esc(it.location) : '<span style="color:var(--muted2)">—</span>'}</td>
+                <td>
+                  <div class="wh-actions">
+                    <button class="btn small secondary" data-action="stock-up" data-id="${it.id}">+۱</button>
+                    <button class="btn small secondary" data-action="stock-down" data-id="${it.id}">−۱</button>
+                    <button class="btn small ghost" data-action="edit-item" data-id="${it.id}">ویرایش</button>
+                    <button class="btn small danger" data-action="delete-item" data-id="${it.id}">حذف</button>
+                  </div>
+                </td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>`}
+  `;
+}
+
+/* ===================== users ===================== */
+
+function accessLabel(u){
+  const parts = [];
+  if(u.isAdmin){ parts.push("مدیر سیستم"); return parts; }
+  if(u.canAccessBatches) parts.push("کشت‌ها");
+  if(u.canAccessWarehouse) parts.push("انبار کالا");
+  return parts;
+}
+
+function renderUsersTab(){
+  return `
+    <div class="stat-row two">
+      <div class="chip"><div class="v">${fmt(DB.users.length)}</div><div class="l">تعداد کاربران</div></div>
+      <div class="chip good"><div class="v">${fmt(DB.users.filter(u => u.isAdmin || (u.canAccessBatches && u.canAccessWarehouse)).length)}</div><div class="l">دسترسی کامل</div></div>
+    </div>
+    <div class="section-head">
+      <h2>کاربران</h2>
+      <button class="btn primary" data-action="new-user">+ کاربر جدید</button>
+    </div>
+    ${DB.users.length === 0 ? `
+      <div class="empty">
+        <p>هنوز کاربری ثبت نشده است.</p>
+        <button class="btn primary" data-action="new-user">افزودن کاربر</button>
+      </div>` : `
+      <div class="wh-card-wrap">
+        <table class="wh">
+          <thead><tr><th>نام و نام خانوادگی</th><th>نام کاربری</th><th>سمت سازمانی</th><th>دسترسی‌ها</th><th>عملیات</th></tr></thead>
+          <tbody>
+            ${DB.users.map(u => `
+              <tr>
+                <td>${esc(u.fullName)}</td>
+                <td style="color:var(--muted)">${esc(u.username)}</td>
+                <td style="color:var(--muted)">${esc(u.role) || "—"}</td>
+                <td>
+                  <div class="wh-actions">
+                    ${accessLabel(u).length === 0
+                      ? `<span class="badge pending">بدون دسترسی</span>`
+                      : accessLabel(u).map(t => `<span class="badge ready">${t}</span>`).join("")}
+                  </div>
+                </td>
+                <td>
+                  <div class="wh-actions">
+                    <button class="btn small ghost" data-action="edit-user" data-id="${u.id}">ویرایش</button>
+                    <button class="btn small danger" data-action="delete-user" data-id="${u.id}" ${u.id===AUTH.user.id ? 'disabled title="حذف حساب خودتان مجاز نیست"' : ''}>حذف</button>
+                  </div>
+                </td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>`}
+  `;
+}
+
+/* ===================== modals ===================== */
+
+function closeModal(){ document.getElementById("modal-root").innerHTML = ""; }
+
+function modalShell(title, bodyHtml){
+  document.getElementById("modal-root").innerHTML = `
+    <div class="overlay" id="overlay">
+      <div class="modal">
+        <div class="modal-head">
+          <h3>${esc(title)}</h3>
+          <button class="modal-close" data-action="close-modal">×</button>
+        </div>
+        <div class="modal-body">${bodyHtml}</div>
+      </div>
+    </div>
+  `;
+  document.getElementById("overlay").addEventListener("click", (e) => { if(e.target.id === "overlay") closeModal(); });
+}
+
+function modalErr(msg){
+  const el = document.getElementById("modal-err");
+  if(el) el.textContent = msg || "";
+}
+
+/* ---- batch modal ---- */
+
+function openBatchModal(batch){
+  const editing = !!batch;
+  const b = batch || { name:"", startDate: todayISO(), readyDays: 30, productionQty:"", unit:"کیلوگرم", note:"" };
+  modalShell(editing ? "ویرایش کشت" : "کشت جدید", `
+    <div id="modal-err" class="login-err" style="display:none;"></div>
+    <label class="field"><span class="lbl">نام کشت</span>
+      <input class="inp" id="f-name" value="${esc(b.name)}" placeholder="مثلاً کشت شماره ۱ — کود دامی" />
+    </label>
+    <div class="row2">
+      <label class="field"><span class="lbl">تاریخ شروع</span><input type="date" class="inp" id="f-startDate" value="${esc(b.startDate)}" /></label>
+      <label class="field"><span class="lbl">روز تا آماده شدن</span><input type="number" min="0" class="inp" id="f-readyDays" value="${esc(b.readyDays)}" /></label>
+    </div>
+    <div class="row2">
+      <label class="field"><span class="lbl">مقدار تولید (پیش‌بینی/واقعی)</span><input type="number" min="0" class="inp" id="f-productionQty" value="${esc(b.productionQty)}" /></label>
+      <label class="field"><span class="lbl">واحد</span>
+        <select class="inp" id="f-unit">${UNITS.map(u=>`<option value="${u}" ${b.unit===u?'selected':''}>${u}</option>`).join("")}</select>
+      </label>
+    </div>
+    <label class="field"><span class="lbl">توضیحات (اختیاری)</span><textarea class="inp" id="f-note" rows="2">${esc(b.note)}</textarea></label>
+    <div class="modal-actions">
+      <button class="btn primary full" data-action="save-batch" data-id="${editing ? b.id : ''}">ذخیره</button>
+      <button class="btn secondary full" data-action="close-modal">انصراف</button>
+    </div>
+  `);
+}
+
+async function saveBatchFromModal(id){
+  const name = document.getElementById("f-name").value.trim();
+  const startDate = document.getElementById("f-startDate").value;
+  const readyDays = document.getElementById("f-readyDays").value;
+  if(!name || !startDate || !readyDays){ modalErr("نام، تاریخ شروع و روز تا آماده شدن الزامی است."); document.getElementById("modal-err").style.display="block"; return; }
+  const payload = {
+    name, startDate, readyDays: toNum(readyDays),
+    productionQty: toNum(document.getElementById("f-productionQty").value),
+    unit: document.getElementById("f-unit").value,
+    note: document.getElementById("f-note").value.trim(),
+  };
+  try{
+    if(id) await api("/batches/" + id, { method:"PUT", body: payload });
+    else await api("/batches", { method:"POST", body: payload });
+    closeModal();
+    await loadBatches();
+    if(id && UI.openBatchId === id) await reloadBatchAndList(id);
+  }catch(err){
+    modalErr(err.message); document.getElementById("modal-err").style.display="block";
+  }
+}
+
+async function deleteBatch(id){
+  try{
+    await api("/batches/" + id, { method:"DELETE" });
+    if(UI.openBatchId === id){ UI.openBatchId = null; UI.batchDetail = null; }
+    await loadBatches();
+  }catch(err){ UI.saveError = err.message; render(); }
+}
+
+/* ---- purchase modal ---- */
+
+async function openPurchaseModal(batchId, purchase){
+  try{ DB.items = await api("/items"); }catch(e){ /* datalist just won't have suggestions */ }
+  const editing = !!purchase;
+  const p = purchase || { batchId, date: todayISO(), itemName:"", qty:"", unit:"کیلوگرم", unitPrice:"", supplier:"", note:"" };
+  modalShell(editing ? "ویرایش فاکتور خرید" : "فاکتور خرید جدید", `
+    <div id="modal-err" class="login-err" style="display:none;"></div>
+    <label class="field"><span class="lbl">تاریخ</span><input type="date" class="inp" id="f-date" value="${esc(p.date)}" /></label>
+    <label class="field"><span class="lbl">نام کالا / ماده اولیه</span>
+      <input class="inp" id="f-itemName" list="item-names" value="${esc(p.itemName)}" placeholder="مثلاً کاه، کود دامی، ضایعات کشاورزی" />
+      <span class="hint">اگر نام یک کالای موجود در انبار را وارد کنید، موجودی آن به‌طور خودکار افزایش می‌یابد.</span>
+      <datalist id="item-names">${DB.items.map(it => `<option value="${esc(it.name)}"></option>`).join("")}</datalist>
+    </label>
+    <div class="row2">
+      <label class="field"><span class="lbl">مقدار</span><input type="number" min="0" class="inp" id="f-qty" value="${esc(p.qty)}" /></label>
+      <label class="field"><span class="lbl">واحد</span>
+        <select class="inp" id="f-unit">${UNITS.map(u=>`<option value="${u}" ${p.unit===u?'selected':''}>${u}</option>`).join("")}</select>
+      </label>
+    </div>
+    <label class="field"><span class="lbl">قیمت واحد (تومان)</span><input type="number" min="0" class="inp" id="f-unitPrice" value="${esc(p.unitPrice)}" /></label>
+    <div class="total-preview">جمع فاکتور: <b id="f-total-preview">${fmt(toNum(p.qty)*toNum(p.unitPrice))}</b> تومان</div>
+    <label class="field"><span class="lbl">تامین‌کننده (اختیاری)</span><input class="inp" id="f-supplier" value="${esc(p.supplier)}" /></label>
+    <label class="field"><span class="lbl">توضیحات (اختیاری)</span><textarea class="inp" id="f-note" rows="2">${esc(p.note)}</textarea></label>
+    <div class="modal-actions">
+      <button class="btn primary full" data-action="save-purchase" data-id="${editing ? p.id : ''}" data-batch-id="${batchId}">ذخیره</button>
+      <button class="btn secondary full" data-action="close-modal">انصراف</button>
+    </div>
+  `);
+  const upd = () => {
+    document.getElementById("f-total-preview").textContent =
+      fmt(toNum(document.getElementById("f-qty").value) * toNum(document.getElementById("f-unitPrice").value));
+  };
+  document.getElementById("f-qty").addEventListener("input", upd);
+  document.getElementById("f-unitPrice").addEventListener("input", upd);
+}
+
+async function savePurchaseFromModal(id, batchId){
+  const itemName = document.getElementById("f-itemName").value.trim();
+  const qty = document.getElementById("f-qty").value;
+  const unitPrice = document.getElementById("f-unitPrice").value;
+  if(!itemName || !qty || !unitPrice){ modalErr("نام کالا، مقدار و قیمت واحد الزامی است."); document.getElementById("modal-err").style.display="block"; return; }
+  const payload = {
+    batchId, date: document.getElementById("f-date").value, itemName,
+    qty: toNum(qty), unit: document.getElementById("f-unit").value, unitPrice: toNum(unitPrice),
+    supplier: document.getElementById("f-supplier").value.trim(),
+    note: document.getElementById("f-note").value.trim(),
+  };
+  try{
+    if(id) await api("/purchases/" + id, { method:"PUT", body: payload });
+    else await api("/purchases", { method:"POST", body: payload });
+    closeModal();
+    await reloadBatchAndList(batchId);
+  }catch(err){
+    modalErr(err.message); document.getElementById("modal-err").style.display="block";
+  }
+}
+
+async function deletePurchase(id, batchId){
+  try{
+    await api("/purchases/" + id, { method:"DELETE" });
+    await reloadBatchAndList(batchId);
+  }catch(err){ UI.saveError = err.message; render(); }
+}
+
+/* ---- sale modal ---- */
+
+function openSaleModal(batchId, sale){
+  const editing = !!sale;
+  const batch = (UI.batchDetail && UI.batchDetail.id === batchId) ? UI.batchDetail : DB.batches.find(x => x.id === batchId);
+  const s = sale || { batchId, date: todayISO(), qty:"", unitPrice:"", customer:"", note:"" };
+  modalShell(editing ? "ویرایش فاکتور فروش" : "فاکتور فروش جدید", `
+    <div id="modal-err" class="login-err" style="display:none;"></div>
+    <label class="field"><span class="lbl">تاریخ</span><input type="date" class="inp" id="f-date" value="${esc(s.date)}" /></label>
+    <label class="field"><span class="lbl">مقدار (${esc(batch ? batch.unit : "")})</span><input type="number" min="0" class="inp" id="f-qty" value="${esc(s.qty)}" /></label>
+    <label class="field"><span class="lbl">قیمت واحد (تومان)</span><input type="number" min="0" class="inp" id="f-unitPrice" value="${esc(s.unitPrice)}" /></label>
+    <div class="total-preview">جمع فاکتور: <b id="f-total-preview">${fmt(toNum(s.qty)*toNum(s.unitPrice))}</b> تومان</div>
+    <label class="field"><span class="lbl">مشتری (اختیاری)</span><input class="inp" id="f-customer" value="${esc(s.customer)}" /></label>
+    <label class="field"><span class="lbl">توضیحات (اختیاری)</span><textarea class="inp" id="f-note" rows="2">${esc(s.note)}</textarea></label>
+    <div class="modal-actions">
+      <button class="btn primary full" data-action="save-sale" data-id="${editing ? s.id : ''}" data-batch-id="${batchId}">ذخیره</button>
+      <button class="btn secondary full" data-action="close-modal">انصراف</button>
+    </div>
+  `);
+  const upd = () => {
+    document.getElementById("f-total-preview").textContent =
+      fmt(toNum(document.getElementById("f-qty").value) * toNum(document.getElementById("f-unitPrice").value));
+  };
+  document.getElementById("f-qty").addEventListener("input", upd);
+  document.getElementById("f-unitPrice").addEventListener("input", upd);
+}
+
+async function saveSaleFromModal(id, batchId){
+  const qty = document.getElementById("f-qty").value;
+  const unitPrice = document.getElementById("f-unitPrice").value;
+  if(!qty || !unitPrice){ modalErr("مقدار و قیمت واحد الزامی است."); document.getElementById("modal-err").style.display="block"; return; }
+  const payload = {
+    batchId, date: document.getElementById("f-date").value, qty: toNum(qty), unitPrice: toNum(unitPrice),
+    customer: document.getElementById("f-customer").value.trim(),
+    note: document.getElementById("f-note").value.trim(),
+  };
+  try{
+    let result;
+    if(id) result = await api("/sales/" + id, { method:"PUT", body: payload });
+    else result = await api("/sales", { method:"POST", body: payload });
+    closeModal();
+    await reloadBatchAndList(batchId);
+    if(result && result.warning){ UI.saveError = result.warning; render(); }
+  }catch(err){
+    modalErr(err.message); document.getElementById("modal-err").style.display="block";
+  }
+}
+
+async function deleteSale(id, batchId){
+  try{
+    await api("/sales/" + id, { method:"DELETE" });
+    await reloadBatchAndList(batchId);
+  }catch(err){ UI.saveError = err.message; render(); }
+}
+
+/* ---- warehouse item modal ---- */
+
+function openItemModal(item){
+  const editing = !!item;
+  const it = item || { name:"", unit:"کیلوگرم", stock:0, location:"" };
+  modalShell(editing ? "ویرایش کالا" : "کالای جدید", `
+    <div id="modal-err" class="login-err" style="display:none;"></div>
+    <label class="field"><span class="lbl">نام کالا</span><input class="inp" id="f-name" value="${esc(it.name)}" /></label>
+    <div class="row2">
+      <label class="field"><span class="lbl">واحد</span>
+        <select class="inp" id="f-unit">${UNITS.map(u=>`<option value="${u}" ${it.unit===u?'selected':''}>${u}</option>`).join("")}</select>
+      </label>
+      <label class="field"><span class="lbl">موجودی</span><input type="number" min="0" class="inp" id="f-stock" value="${esc(it.stock)}" /></label>
+    </div>
+    <label class="field"><span class="lbl">محل نگهداری (اختیاری)</span>
+      <input class="inp" id="f-location" value="${esc(it.location)}" placeholder="مثلاً سالن ۱ - قفسه ۳" />
+    </label>
+    <div class="modal-actions">
+      <button class="btn primary full" data-action="save-item" data-id="${editing ? it.id : ''}">ذخیره</button>
+      <button class="btn secondary full" data-action="close-modal">انصراف</button>
+    </div>
+  `);
+}
+
+async function saveItemFromModal(id){
+  const name = document.getElementById("f-name").value.trim();
+  if(!name){ modalErr("نام کالا الزامی است."); document.getElementById("modal-err").style.display="block"; return; }
+  const payload = {
+    name,
+    unit: document.getElementById("f-unit").value,
+    stock: toNum(document.getElementById("f-stock").value),
+    location: document.getElementById("f-location").value.trim(),
+  };
+  try{
+    if(id) await api("/items/" + id, { method:"PUT", body: payload });
+    else await api("/items", { method:"POST", body: payload });
+    closeModal();
+    await loadItems();
+  }catch(err){
+    modalErr(err.message); document.getElementById("modal-err").style.display="block";
+  }
+}
+
+async function deleteItem(id){
+  try{ await api("/items/" + id, { method:"DELETE" }); await loadItems(); }
+  catch(err){ UI.saveError = err.message; render(); }
+}
+
+async function adjustStock(id, delta){
+  try{ await api("/items/" + id + "/stock", { method:"PATCH", body:{ delta } }); await loadItems(); }
+  catch(err){ UI.saveError = err.message; render(); }
+}
+
+async function loadItems(){ DB.items = await api("/items"); render(); }
+async function loadBatches(){ DB.batches = await api("/batches"); render(); }
+async function loadUsers(){ DB.users = await api("/users"); render(); }
+
+/* ---- user modal ---- */
+
+function openUserModal(user){
+  const editing = !!user;
+  const u = user || { fullName:"", username:"", password:"", role:"", canAccessBatches:true, canAccessWarehouse:false, isAdmin:false };
+  modalShell(editing ? "ویرایش کاربر" : "کاربر جدید", `
+    <div id="modal-err" class="login-err" style="display:none;"></div>
+    <label class="field"><span class="lbl">نام و نام خانوادگی</span>
+      <input class="inp" id="f-fullName" value="${esc(u.fullName)}" placeholder="مثلاً علی محمدی" />
+    </label>
+    <div class="row2">
+      <label class="field"><span class="lbl">نام کاربری</span><input class="inp" id="f-username" value="${esc(u.username)}" /></label>
+      <label class="field"><span class="lbl">سمت سازمانی</span><input class="inp" id="f-role" value="${esc(u.role)}" placeholder="مثلاً مسئول انبار" /></label>
+    </div>
+    <label class="field"><span class="lbl">کلمه عبور</span>
+      <input type="password" class="inp" id="f-password" placeholder="${editing ? 'برای تغییر ندادن، خالی بگذارید' : ''}" />
+      <span class="hint">
+        <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;">
+          <input type="checkbox" id="f-showpass" /> نمایش کلمه عبور
+        </label>
+      </span>
+    </label>
+    <label class="field"><span class="lbl">دسترسی به بخش‌ها</span>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-top:4px;">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;">
+          <input type="checkbox" id="f-access-batches" ${u.canAccessBatches ? 'checked' : ''} /> کشت‌ها
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;">
+          <input type="checkbox" id="f-access-warehouse" ${u.canAccessWarehouse ? 'checked' : ''} /> انبار کالا
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;">
+          <input type="checkbox" id="f-access-admin" ${u.isAdmin ? 'checked' : ''} /> مدیر سیستم (دسترسی کامل + مدیریت کاربران)
+        </label>
+      </div>
+    </label>
+    <div class="modal-actions">
+      <button class="btn primary full" data-action="save-user" data-id="${editing ? u.id : ''}">ذخیره</button>
+      <button class="btn secondary full" data-action="close-modal">انصراف</button>
+    </div>
+  `);
+  document.getElementById("f-showpass").addEventListener("change", (e) => {
+    document.getElementById("f-password").type = e.target.checked ? "text" : "password";
+  });
+}
+
+async function saveUserFromModal(id){
+  const fullName = document.getElementById("f-fullName").value.trim();
+  const username = document.getElementById("f-username").value.trim();
+  const password = document.getElementById("f-password").value;
+  if(!fullName || !username){ modalErr("نام و نام خانوادگی و نام کاربری الزامی است."); document.getElementById("modal-err").style.display="block"; return; }
+  if(!id && !password){ modalErr("برای کاربر جدید، کلمه عبور الزامی است."); document.getElementById("modal-err").style.display="block"; return; }
+
+  const payload = {
+    fullName, username,
+    role: document.getElementById("f-role").value.trim(),
+    canAccessBatches: document.getElementById("f-access-batches").checked,
+    canAccessWarehouse: document.getElementById("f-access-warehouse").checked,
+    isAdmin: document.getElementById("f-access-admin").checked,
+  };
+  if(password) payload.password = password;
+
+  try{
+    if(id) await api("/users/" + id, { method:"PUT", body: payload });
+    else await api("/users", { method:"POST", body: payload });
+    closeModal();
+    await loadUsers();
+  }catch(err){
+    modalErr(err.message); document.getElementById("modal-err").style.display="block";
+  }
+}
+
+async function deleteUser(id){
+  try{ await api("/users/" + id, { method:"DELETE" }); await loadUsers(); }
+  catch(err){ UI.saveError = err.message; render(); }
+}
+
+/* ===================== event delegation ===================== */
+
+document.addEventListener("click", async (e) => {
+  const el = e.target.closest("[data-action]");
+  if(!el){
+    if(UI.menuOpen && !e.target.closest("nav.tabs") && !e.target.closest(".hamburger")){
+      UI.menuOpen = false; render();
+    }
+    return;
+  }
+  if(el.hasAttribute("disabled")) return;
+
+  const action = el.dataset.action;
+  const id = el.dataset.id;
+  const batchId = el.dataset.batchId;
+
+  switch(action){
+    case "toggle-menu": UI.menuOpen = !UI.menuOpen; render(); break;
+    case "set-tab": UI.tab = el.dataset.tab; UI.openBatchId = null; UI.batchDetail = null; UI.menuOpen = false; await loadForTab(UI.tab); break;
+    case "logout": logout(); break;
+
+    case "open-batch": await openBatchDetailAction(id); break;
+    case "back-to-batches": UI.openBatchId = null; UI.batchDetail = null; render(); break;
+
+    case "new-batch": openBatchModal(null); break;
+    case "edit-batch": openBatchModal(UI.batchDetail && UI.batchDetail.id === id ? UI.batchDetail : DB.batches.find(b => b.id === id)); break;
+    case "delete-batch": await deleteBatch(id); break;
+    case "save-batch": await saveBatchFromModal(id || null); break;
+
+    case "new-purchase": await openPurchaseModal(batchId, null); break;
+    case "edit-purchase": await openPurchaseModal(UI.openBatchId, (UI.batchDetail.purchases || []).find(p => p.id === id)); break;
+    case "delete-purchase": await deletePurchase(id, batchId); break;
+    case "save-purchase": await savePurchaseFromModal(id || null, batchId); break;
+
+    case "new-sale": openSaleModal(batchId, null); break;
+    case "edit-sale": openSaleModal(UI.openBatchId, (UI.batchDetail.sales || []).find(s => s.id === id)); break;
+    case "delete-sale": await deleteSale(id, batchId); break;
+    case "save-sale": await saveSaleFromModal(id || null, batchId); break;
+
+    case "new-item": openItemModal(null); break;
+    case "edit-item": openItemModal(DB.items.find(i => i.id === id)); break;
+    case "delete-item": await deleteItem(id); break;
+    case "save-item": await saveItemFromModal(id || null); break;
+    case "stock-up": await adjustStock(id, 1); break;
+    case "stock-down": await adjustStock(id, -1); break;
+
+    case "new-user": openUserModal(null); break;
+    case "edit-user": openUserModal(DB.users.find(u => u.id === id)); break;
+    case "delete-user": await deleteUser(id); break;
+    case "save-user": await saveUserFromModal(id || null); break;
+
+    case "close-modal": closeModal(); break;
+  }
+});
+
+async function openBatchDetailAction(id){
+  UI.openBatchId = id;
+  UI.batchDetail = null;
+  render();
+  try{
+    UI.batchDetail = await api("/batches/" + id);
+  }catch(err){
+    UI.saveError = err.message;
+  }
+  render();
+}
+
+/* ===================== boot ===================== */
+
+async function boot(){
+  const saved = loadAuthFromStorage();
+  if(saved && saved.token && saved.user){
+    AUTH.token = saved.token;
+    AUTH.user = saved.user;
+    try{
+      // نشست را با سرور اعتبارسنجی می‌کنیم (اگر توکن منقضی شده باشد، خودکار خارج می‌شویم)
+      const fresh = await api("/auth/me");
+      AUTH.user = fresh;
+      saveAuthToStorage();
+      await afterLogin();
+      return;
+    }catch(e){
+      // api() در صورت 401 خودش AUTH را پاک و صفحه ورود را نشان داده؛
+      // برای خطاهای دیگر (مثلاً قطعی شبکه) هم صفحه ورود را نشان می‌دهیم.
+      render();
+      return;
+    }
+  }
+  render();
+}
+
+boot();
+</script>
+</body>
+</html>
