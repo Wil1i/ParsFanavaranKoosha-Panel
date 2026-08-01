@@ -34,6 +34,19 @@ const Sale = sequelize.define("Sale", {
     type: DataTypes.FLOAT,
     allowNull: false,
   },
+  paidAmount: {
+    // مبلغ پرداخت‌شده توسط مشتری؛ مانده = total - paidAmount
+    type: DataTypes.FLOAT,
+    allowNull: false,
+    defaultValue: 0,
+    field: "paid_amount",
+  },
+  paymentTrackingNumber: {
+    // شماره پیگیری رسید پرداخت مشتری (بانکی/درگاه)
+    type: DataTypes.STRING(100),
+    allowNull: true,
+    field: "payment_tracking_number",
+  },
   customer: {
     // نام مشتری به‌صورت اسنپ‌شات (حتی اگر بعداً مشتری حذف/ویرایش شود، در فاکتور ثابت می‌ماند)
     type: DataTypes.STRING(150),

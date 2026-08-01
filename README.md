@@ -91,7 +91,7 @@ Authorization: Bearer <token>
 | Method | مسیر | توضیح |
 |---|---|---|
 | GET | `/api/sales?batchId=...` | لیست |
-| POST | `/api/sales` | `{ batchId, date, qty, unit, unitPrice, customer, note }` — اگر `unit` ارسال نشود، واحد پیش‌فرض کشت استفاده می‌شود؛ اگر مقدار از باقیمانده بیشتر باشد، پاسخ شامل فیلد `warning` است (بلاک نمی‌شود) |
+| POST | `/api/sales` | `{ batchId, date, qty, unit, unitPrice, paidAmount, paymentTrackingNumber, customer, note }` — اگر `unit` ارسال نشود، واحد پیش‌فرض کشت استفاده می‌شود؛ پاسخ شامل `due` (مانده = total - paidAmount) است؛ اگر مقدار از باقیمانده بیشتر باشد، پاسخ شامل فیلد `warning` هم هست (بلاک نمی‌شود) |
 | PUT | `/api/sales/:id` | ویرایش |
 | DELETE | `/api/sales/:id` | حذف |
 
@@ -131,6 +131,8 @@ Authorization: Bearer <token>
 | DELETE | `/api/customers/:id` | حذف (فاکتورهای فروش قبلی این مشتری حذف نمی‌شوند؛ فقط ارتباطشان با رکورد مشتری قطع می‌شود و نام مشتری به‌صورت اسنپ‌شات در خودِ فاکتور باقی می‌ماند) |
 
 فاکتور فروش (`POST/PUT /api/sales`) می‌تواند علاوه بر `customer` (نام آزاد)، فیلد اختیاری `customerId` هم بگیرد تا فاکتور به یک رکورد مشتری مشخص متصل شود.
+
+«شماره پیگیری فاکتور» جداگانه ذخیره نمی‌شود؛ همان `id` رکورد فاکتور فروش به‌عنوان شماره پیگیری فاکتور در نظر گرفته می‌شود. برای شماره پیگیری رسید پرداخت مشتری (بانک/درگاه)، فیلد جدای `paymentTrackingNumber` وجود دارد.
 
 ### انبار کالا
 | Method | مسیر | توضیح |

@@ -267,7 +267,7 @@
    قبل از استفاده، آدرس API_BASE را با آدرس سرور خودتان جایگزین کنید.
    ===================================================================== */
 
-const API_BASE = "/api"; // TODO: آدرس بک‌اند خودتان را اینجا بگذارید
+const API_BASE = "http://localhost:4000/api"; // TODO: آدرس بک‌اند خودتان را اینجا بگذارید
 
 const UNITS = ["کیلوگرم", "تن", "کیسه", "متر مکعب", "عدد"];
 
@@ -928,16 +928,24 @@ function renderBatchDetail(){
           <button class="btn small primary" data-action="new-sale" data-batch-id="${b.id}">+ فاکتور فروش</button>
         </div>
         ${(!b.sales || b.sales.length === 0) ? `<div class="empty-mini">فاکتور فروشی ثبت نشده است.</div>` :
-          b.sales.slice().sort((a,x)=> a.date < x.date ? 1 : -1).map(s => `
+          b.sales.slice().sort((a,x)=> a.date < x.date ? 1 : -1).map(s => {
+            const due = toNum(s.total) - toNum(s.paidAmount);
+            return `
             <div class="invoice-row">
               <div class="r1"><span class="name">${esc(s.customer || "مشتری بدون نام")}</span><span class="date">${fmtDate(s.date)}</span></div>
               <div class="r2"><span>${fmt(s.qty)} ${esc(s.unit || b.unit)} × ${fmt(s.unitPrice)} تومان</span><span class="tot">${fmt(s.total)} تومان</span></div>
+              <div class="r2">
+                <span>پرداخت‌شده: ${fmt(s.paidAmount)} تومان</span>
+                <span style="font-weight:800;color:${due > 0 ? 'var(--danger-text)' : 'var(--primary)'};">مانده: ${fmt(due)} تومان</span>
+              </div>
+              ${s.paymentTrackingNumber ? `<div class="r3">شماره پیگیری پرداخت: ${esc(s.paymentTrackingNumber)}</div>` : ""}
+              <div class="r3">شماره پیگیری فاکتور: <span style="font-family:monospace;">${esc(s.id)}</span></div>
               <div class="r4">
                 <button class="btn small ghost" data-action="edit-sale" data-id="${s.id}">ویرایش</button>
                 <button class="btn small danger" data-action="delete-sale" data-id="${s.id}" data-batch-id="${b.id}">حذف</button>
               </div>
             </div>
-          `).join("")}
+          `;}).join("")}
       </div>
     </div>
   `;
@@ -1448,7 +1456,7 @@ async function openSaleModal(batchId, sale){
   try{ DB.customers = await api("/customers"); }catch(e){ /* دراپ‌داون فقط بدون گزینه می‌ماند */ }
   const editing = !!sale;
   const batch = (UI.batchDetail && UI.batchDetail.id === batchId) ? UI.batchDetail : DB.batches.find(x => x.id === batchId);
-  const s = sale || { batchId, date: todayISO(), qty:"", unitPrice:"", customer:"", customerId:"", note:"" };
+  const s = sale || { batchId, date: todayISO(), qty:"", unitPrice:"", customer:"", customerId:"", paidAmount:"0", paymentTrackingNumber:"", note:"" };
 
   const matchedCustomer = s.customerId ? DB.customers.find(c => c.id === s.customerId) : null;
   const isCustomCustomer = !!s.customer && !matchedCustomer;
@@ -1464,6 +1472,15 @@ async function openSaleModal(batchId, sale){
     </div>
     <label class="field"><span class="lbl">قیمت واحد (تومان)</span><input type="number" min="0" class="inp" id="f-unitPrice" value="${esc(s.unitPrice)}" /></label>
     <div class="total-preview">جمع فاکتور: <b id="f-total-preview">${fmt(toNum(s.qty)*toNum(s.unitPrice))}</b> تومان</div>
+
+    <label class="field"><span class="lbl">مبلغ پرداخت‌شده (تومان)</span><input type="number" min="0" class="inp" id="f-paidAmount" value="${esc(s.paidAmount ?? 0)}" /></label>
+    <div class="total-preview" id="f-due-preview" style="margin-top:-8px;">
+      مبلغ مانده: <b>${fmt(toNum(s.qty)*toNum(s.unitPrice) - toNum(s.paidAmount ?? 0))}</b> تومان
+    </div>
+    <label class="field"><span class="lbl">شماره پیگیری پرداخت (اختیاری)</span>
+      <input class="inp" id="f-paymentTrackingNumber" value="${esc(s.paymentTrackingNumber)}" placeholder="شماره پیگیری رسید پرداخت مشتری" />
+    </label>
+    ${editing ? `<div class="hint" style="margin:-8px 0 14px;">شماره پیگیری این فاکتور: <span style="font-family:monospace;">${esc(s.id)}</span></div>` : ""}
     <label class="field"><span class="lbl">مشتری (اختیاری)</span>
       <select class="inp" id="f-customerId">
         <option value="">— بدون مشتری خاص —</option>
@@ -1480,11 +1497,14 @@ async function openSaleModal(batchId, sale){
     </div>
   `);
   const upd = () => {
-    document.getElementById("f-total-preview").textContent =
-      fmt(toNum(document.getElementById("f-qty").value) * toNum(document.getElementById("f-unitPrice").value));
+    const total = toNum(document.getElementById("f-qty").value) * toNum(document.getElementById("f-unitPrice").value);
+    document.getElementById("f-total-preview").textContent = fmt(total);
+    const due = total - toNum(document.getElementById("f-paidAmount").value);
+    document.getElementById("f-due-preview").innerHTML = `مبلغ مانده: <b>${fmt(due)}</b> تومان`;
   };
   document.getElementById("f-qty").addEventListener("input", upd);
   document.getElementById("f-unitPrice").addEventListener("input", upd);
+  document.getElementById("f-paidAmount").addEventListener("input", upd);
   document.getElementById("f-customerId").addEventListener("change", (e) => {
     document.getElementById("f-customer-custom").style.display = e.target.value === "__custom__" ? "" : "none";
   });
@@ -1509,6 +1529,8 @@ async function saveSaleFromModal(id, batchId){
   const payload = {
     batchId, date: document.getElementById("f-date").value, qty: toNum(qty), unitPrice: toNum(unitPrice),
     unit: document.getElementById("f-unit").value,
+    paidAmount: toNum(document.getElementById("f-paidAmount").value),
+    paymentTrackingNumber: document.getElementById("f-paymentTrackingNumber").value.trim(),
     customer: customerName,
     customerId: customerId || null,
     note: document.getElementById("f-note").value.trim(),
