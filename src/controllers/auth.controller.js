@@ -1,5 +1,6 @@
 const jwt = require("jsonwebtoken");
 const { User } = require("../models");
+const { logActivity } = require("../utils/activityLogger");
 
 function signToken(user) {
   return jwt.sign(
@@ -36,6 +37,13 @@ exports.login = async (req, res, next) => {
 
     const token = signToken(user);
     const { password: _pw, ...safeUser } = user.toJSON();
+    await logActivity({
+      user: safeUser,
+      action: "LOGIN",
+      entityType: "auth",
+      entityId: user.id,
+      description: `کاربر «${user.fullName}» (${user.username}) وارد سیستم شد.`,
+    });
     res.json({ token, user: safeUser });
   } catch (err) {
     next(err);

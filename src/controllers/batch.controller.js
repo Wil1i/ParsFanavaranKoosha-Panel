@@ -1,5 +1,6 @@
 const { Batch, Purchase, Sale, sequelize } = require("../models");
 const { batchMeta } = require("../utils/batchMeta");
+const { logActivity } = require("../utils/activityLogger");
 
 async function computeTotals(batchId) {
   const [purchaseCost, soldQty, revenue] = await Promise.all([
@@ -66,6 +67,10 @@ exports.create = async (req, res, next) => {
       unit: unit || "کیلوگرم",
       note: note || null,
     });
+    await logActivity({
+      user: req.user, action: "BATCH_CREATE", entityType: "batch", entityId: batch.id,
+      description: `کشت «${batch.name}» ایجاد شد.`,
+    });
     res.status(201).json(serializeBatch(batch, { purchaseCost: 0, soldQty: 0, revenue: 0 }));
   } catch (err) {
     next(err);
@@ -85,6 +90,11 @@ exports.update = async (req, res, next) => {
     if (unit !== undefined) batch.unit = unit;
     if (note !== undefined) batch.note = note;
     await batch.save();
+
+    await logActivity({
+      user: req.user, action: "BATCH_UPDATE", entityType: "batch", entityId: batch.id,
+      description: `کشت «${batch.name}» ویرایش شد.`,
+    });
 
     const totals = await computeTotals(batch.id);
     res.json(serializeBatch(batch, totals));
@@ -107,6 +117,10 @@ exports.remove = async (req, res, next) => {
     await Sale.destroy({ where: { batchId: batch.id }, transaction: t });
     await batch.destroy({ transaction: t });
     await t.commit();
+    await logActivity({
+      user: req.user, action: "BATCH_DELETE", entityType: "batch", entityId: batch.id,
+      description: `کشت «${batch.name}» حذف شد.`,
+    });
     res.status(204).send();
   } catch (err) {
     await t.rollback();

@@ -8,6 +8,11 @@ const batchRoutes = require("./routes/batch.routes");
 const purchaseRoutes = require("./routes/purchase.routes");
 const saleRoutes = require("./routes/sale.routes");
 const itemRoutes = require("./routes/item.routes");
+const dashboardRoutes = require("./routes/dashboard.routes");
+const activityLogRoutes = require("./routes/activityLog.routes");
+const integrationRoutes = require("./routes/integration.routes");
+const webOrderRoutes = require("./routes/weborder.routes");
+const customerRoutes = require("./routes/customer.routes");
 const { notFound, errorHandler } = require("./middleware/error.middleware");
 
 const app = express();
@@ -24,6 +29,11 @@ app.use("/api/batches", batchRoutes);
 app.use("/api/purchases", purchaseRoutes);
 app.use("/api/sales", saleRoutes);
 app.use("/api/items", itemRoutes);
+app.use("/api/dashboard", dashboardRoutes);
+app.use("/api/logs", activityLogRoutes);
+app.use("/api/integrations", integrationRoutes);
+app.use("/api/web-orders", webOrderRoutes);
+app.use("/api/customers", customerRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

@@ -26,7 +26,7 @@
   ::-webkit-scrollbar-thumb{ background:#d3ccb4; border-radius:4px; }
 
   .wrap{ max-width:1080px; margin:0 auto; padding:0 16px; }
-  header.top{ background:var(--primary); color:#fff; position:relative; margin-bottom: 7px; }
+  header.top{ background:var(--primary); color:#fff; position:relative; }
   .top-inner{ display:flex; align-items:center; justify-content:space-between; padding:18px 0; gap:12px; }
   .top-inner h1{ margin:0; font-size:20px; font-weight:800; }
   .top-inner p{ margin:4px 0 0; font-size:12.5px; color:#cfe0c4; }
@@ -60,6 +60,7 @@
   .stat-row{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:24px; }
   .stat-row.two{ grid-template-columns:repeat(2,1fr); }
   .stat-row.four{ grid-template-columns:repeat(4,1fr); }
+  .stat-row.five{ grid-template-columns:repeat(5,1fr); }
 
   @media(max-width:640px){
     .hamburger{ display:flex; }
@@ -74,9 +75,13 @@
     nav.tabs button{ border-radius:10px; padding:12px 14px; color:#e9f0e0; }
     nav.tabs button.active{ background:rgba(255,255,255,.16); color:#fff; }
   }
+  @media(max-width:860px){
+    .stat-row.five{ grid-template-columns:repeat(3,1fr); }
+  }
   @media(max-width:520px){
     .stat-row{ grid-template-columns:repeat(2,1fr); }
     .stat-row.four{ grid-template-columns:repeat(2,1fr); }
+    .stat-row.five{ grid-template-columns:repeat(2,1fr); }
   }
   .chip{ border:1px solid var(--border); border-radius:14px; padding:14px 16px; background:var(--surface); }
   .chip.good{ background:var(--good-bg); border-color:#d3e4c4; }
@@ -123,6 +128,7 @@
   .badge{ font-size:11px; font-weight:800; padding:4px 10px; border-radius:999px; white-space:nowrap; }
   .badge.ready{ background:var(--primary); color:#fff; }
   .badge.pending{ background:#efe4c9; color:var(--warn-text); }
+  .badge.danger{ background:var(--danger-bg); color:var(--danger-text); }
 
   .gauge-label{ display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; font-size:12px; }
   .gauge-label .a{ color:var(--muted); font-weight:500; }
@@ -207,6 +213,8 @@
   .inp:focus{ border-color:var(--primary); box-shadow:0 0 0 3px rgba(63,93,58,.12); }
   textarea.inp{ resize:vertical; }
   .row2{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .jdate{ display:flex; gap:6px; }
+  .jdate select{ flex:1; min-width:0; padding-left:4px; padding-right:4px; }
   .total-preview{ font-size:13px; color:var(--muted); margin-bottom:14px; }
   .total-preview b{ color:var(--text); }
   .modal-actions{ display:flex; gap:8px; margin-top:6px; }
@@ -259,9 +267,9 @@
    قبل از استفاده، آدرس API_BASE را با آدرس سرور خودتان جایگزین کنید.
    ===================================================================== */
 
-const API_BASE = "http://localhost:4000/api"; // TODO: آدرس بک‌اند خودتان را اینجا بگذارید
+const API_BASE = "/api"; // TODO: آدرس بک‌اند خودتان را اینجا بگذارید
 
-const UNITS = ["کیلوگرم", "تن", "کیسه", "متر مکعب"];
+const UNITS = ["کیلوگرم", "تن", "کیسه", "متر مکعب", "عدد"];
 
 let AUTH = { token: null, user: null };
 
@@ -283,7 +291,7 @@ function loadAuthFromStorage(){
 function clearAuthStorage(){
   try{ localStorage.removeItem(AUTH_STORAGE_KEY); }catch(e){ /* storage unavailable */ }
 }
-let DB = { batches: [], items: [], users: [] };
+let DB = { batches: [], items: [], users: [], dashboard: null, logs: null, integrationSettings: null, webOrders: null, customers: [] };
 let UI = {
   tab: null,
   openBatchId: null,
@@ -292,6 +300,10 @@ let UI = {
   saveError: "",
   loginError: "",
   busy: false,
+  logFilters: { entityType:"", action:"", q:"", page:1, limit:50 },
+  webOrderFilters: { status:"", q:"", page:1, limit:30 },
+  integrationBusy: false,
+  integrationMessage: "",
 };
 
 /* ===================== helpers ===================== */
@@ -303,10 +315,132 @@ function fmtDate(iso){
   try{ return new Date(iso).toLocaleDateString("fa-IR", { year:"numeric", month:"2-digit", day:"2-digit" }); }
   catch(e){ return iso; }
 }
+function fmtDateTime(iso){
+  if(!iso) return "—";
+  try{
+    const d = new Date(iso);
+    const date = d.toLocaleDateString("fa-IR", { year:"numeric", month:"2-digit", day:"2-digit" });
+    const time = d.toLocaleTimeString("fa-IR", { hour:"2-digit", minute:"2-digit" });
+    return `${date}  -  ${time}`;
+  }catch(e){ return iso; }
+}
 function esc(s){
   return String(s ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
 }
 function todayISO(){ return new Date().toISOString().slice(0,10); }
+
+/* ===================== تقویم شمسی (جلالی) ===================== */
+
+function jDiv(a,b){ return Math.floor(a/b); }
+
+function gregorianToJalali(gy, gm, gd){
+  const g_d_m = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
+  let jy;
+  if (gy > 1600) { jy = 979; gy -= 1600; } else { jy = 0; gy -= 621; }
+  const gy2 = (gm > 2) ? (gy + 1) : gy;
+  let days = (365 * gy) + jDiv((gy2 + 3), 4) - jDiv((gy2 + 99), 100) + jDiv((gy2 + 399), 400) - 80 + gd + g_d_m[gm - 1];
+  jy += 33 * jDiv(days, 12053);
+  days %= 12053;
+  jy += 4 * jDiv(days, 1461);
+  days %= 1461;
+  if (days > 365) { jy += jDiv((days - 1), 365); days = (days - 1) % 365; }
+  let jm, jd;
+  if (days < 186) { jm = 1 + jDiv(days, 31); jd = 1 + (days % 31); }
+  else { jm = 7 + jDiv((days - 186), 30); jd = 1 + ((days - 186) % 30); }
+  return [jy, jm, jd];
+}
+
+function jalaliToGregorian(jy, jm, jd){
+  let gy;
+  if (jy > 979) { gy = 1600; jy -= 979; } else { gy = 621; }
+  let days = (365 * jy) + (jDiv(jy, 33) * 8) + jDiv(((jy % 33) + 3), 4) + 78 + jd
+    + ((jm < 7) ? (jm - 1) * 31 : ((jm - 7) * 30) + 186);
+  gy += 400 * jDiv(days, 146097);
+  days %= 146097;
+  if (days > 36524) {
+    gy += 100 * jDiv(--days, 36524);
+    days %= 36524;
+    if (days >= 365) days++;
+  }
+  gy += 4 * jDiv(days, 1461);
+  days %= 1461;
+  if (days > 365) { gy += jDiv((days - 1), 365); days = (days - 1) % 365; }
+  let gd = days + 1;
+  const sal_a = [0, 31, ((gy % 4 === 0 && gy % 100 !== 0) || (gy % 400 === 0)) ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  let gm;
+  for (gm = 1; gm <= 12; gm++) { if (gd <= sal_a[gm]) break; gd -= sal_a[gm]; }
+  return [gy, gm, gd];
+}
+
+const JALALI_MONTHS = ["فروردین","اردیبهشت","خرداد","تیر","مرداد","شهریور","مهر","آبان","آذر","دی","بهمن","اسفند"];
+
+function jalaliMonthLength(jy, jm){
+  if (jm <= 6) return 31;
+  if (jm <= 11) return 30;
+  const a = Date.UTC(...jalaliToGregorian(jy, 1, 1).map((v,i)=> i===1 ? v-1 : v));
+  const b = Date.UTC(...jalaliToGregorian(jy+1, 1, 1).map((v,i)=> i===1 ? v-1 : v));
+  return Math.round((b - a) / 86400000) === 366 ? 30 : 29;
+}
+
+function isoToJalaliParts(iso){
+  if(iso){
+    const [gy,gm,gd] = iso.split("-").map(Number);
+    if(gy && gm && gd) return gregorianToJalali(gy, gm, gd);
+  }
+  const now = new Date();
+  return gregorianToJalali(now.getFullYear(), now.getMonth()+1, now.getDate());
+}
+
+function jalaliPartsToISO(jy, jm, jd){
+  const [gy,gm,gd] = jalaliToGregorian(jy, jm, jd);
+  return `${gy}-${String(gm).padStart(2,"0")}-${String(gd).padStart(2,"0")}`;
+}
+
+/** یک تقویم شمسی (سه انتخاب‌گر روز/ماه/سال) که مقدار میلادی معادل را در یک input مخفی با همان id نگه می‌دارد */
+function jalaliDateFieldHtml(fieldId, isoValue){
+  const [jy, jm, jd] = isoToJalaliParts(isoValue);
+  const dayCount = jalaliMonthLength(jy, jm);
+  const dayOpts = Array.from({length:dayCount}, (_,i)=>i+1)
+    .map(d => `<option value="${d}" ${d===jd?"selected":""}>${d}</option>`).join("");
+  const monthOpts = JALALI_MONTHS
+    .map((name,i) => `<option value="${i+1}" ${(i+1)===jm?"selected":""}>${name}</option>`).join("");
+  const years = []; for(let y = jy-6; y <= jy+3; y++) years.push(y);
+  const yearOpts = years.map(y => `<option value="${y}" ${y===jy?"selected":""}>${y}</option>`).join("");
+  const isoVal = isoValue || jalaliPartsToISO(jy, jm, jd);
+  return `
+    <div class="jdate" data-field="${fieldId}">
+      <input type="hidden" id="${fieldId}" value="${esc(isoVal)}" />
+      <select class="inp jd-part" data-part="day">${dayOpts}</select>
+      <select class="inp jd-part" data-part="month">${monthOpts}</select>
+      <select class="inp jd-part" data-part="year">${yearOpts}</select>
+    </div>
+  `;
+}
+
+/** باید بعد از قرار گرفتن jalaliDateFieldHtml در DOM صدا زده شود */
+function wireJalaliDateField(fieldId){
+  const wrap = document.querySelector(`.jdate[data-field="${fieldId}"]`);
+  if(!wrap) return;
+  const hidden = document.getElementById(fieldId);
+  const daySel = wrap.querySelector('[data-part="day"]');
+  const monthSel = wrap.querySelector('[data-part="month"]');
+  const yearSel = wrap.querySelector('[data-part="year"]');
+
+  function sync(){
+    const jy = toNum(yearSel.value), jm = toNum(monthSel.value);
+    const maxDay = jalaliMonthLength(jy, jm);
+    let jd = toNum(daySel.value);
+    if(daySel.options.length !== maxDay){
+      jd = Math.min(jd, maxDay);
+      daySel.innerHTML = Array.from({length:maxDay}, (_,i)=>i+1)
+        .map(d => `<option value="${d}" ${d===jd?"selected":""}>${d}</option>`).join("");
+    }
+    hidden.value = jalaliPartsToISO(jy, jm, jd);
+  }
+  daySel.addEventListener("change", sync);
+  monthSel.addEventListener("change", sync);
+  yearSel.addEventListener("change", sync);
+}
 
 /* ===================== API client ===================== */
 
@@ -349,10 +483,13 @@ async function api(path, opts = {}){
 function accessibleTabs(){
   const u = AUTH.user;
   if(!u) return [];
-  const tabs = [];
+  const tabs = [{ key:"dashboard", label:"داشبورد" }];
   if(u.isAdmin || u.canAccessBatches) tabs.push({ key:"batches", label:"کشت‌ها" });
+  if(u.isAdmin || u.canAccessBatches) tabs.push({ key:"customers", label:"مشتریان" });
   if(u.isAdmin || u.canAccessWarehouse) tabs.push({ key:"warehouse", label:"انبار کالا" });
   if(u.isAdmin) tabs.push({ key:"users", label:"کاربران" });
+  if(u.isAdmin) tabs.push({ key:"logs", label:"لاگ فعالیت‌ها" });
+  if(u.isAdmin) tabs.push({ key:"integration", label:"اتصال فروشگاه اینترنتی" });
   return tabs;
 }
 
@@ -372,21 +509,65 @@ async function afterLogin(){
 function logout(){
   AUTH = { token:null, user:null };
   clearAuthStorage();
-  DB = { batches:[], items:[], users:[] };
+  DB = { batches:[], items:[], users:[], dashboard:null, logs:null, integrationSettings:null, webOrders:null, customers:[] };
   UI = { tab:null, openBatchId:null, batchDetail:null, menuOpen:false, saveError:"", loginError:"", busy:false };
   render();
 }
 
 async function loadForTab(tab){
   try{
-    if(tab === "batches") DB.batches = await api("/batches");
+    if(tab === "dashboard") DB.dashboard = await api("/dashboard");
+    else if(tab === "batches") DB.batches = await api("/batches");
+    else if(tab === "customers") DB.customers = await api("/customers");
     else if(tab === "warehouse") DB.items = await api("/items");
     else if(tab === "users") DB.users = await api("/users");
+    else if(tab === "logs") await loadLogs();
+    else if(tab === "integration") await Promise.all([loadIntegrationSettings(), loadWebOrders(), (async()=>{ try{ DB.batches = await api("/batches"); }catch(e){} })()]);
     UI.saveError = "";
   }catch(err){
     UI.saveError = err.message;
   }
   render();
+}
+
+function buildLogQuery(){
+  const f = UI.logFilters;
+  const params = new URLSearchParams();
+  params.set("page", f.page);
+  params.set("limit", f.limit);
+  if(f.entityType) params.set("entityType", f.entityType);
+  if(f.action) params.set("action", f.action);
+  if(f.q) params.set("q", f.q);
+  return params.toString();
+}
+
+async function loadLogs(){
+  try{
+    DB.logs = await api("/logs?" + buildLogQuery());
+    UI.saveError = "";
+  }catch(err){
+    UI.saveError = err.message;
+  }
+}
+
+async function loadIntegrationSettings(){
+  try{ DB.integrationSettings = await api("/integrations/woocommerce"); }
+  catch(err){ UI.saveError = err.message; }
+}
+
+function buildWebOrderQuery(){
+  const f = UI.webOrderFilters;
+  const params = new URLSearchParams();
+  params.set("page", f.page);
+  params.set("limit", f.limit);
+  if(f.status) params.set("status", f.status);
+  if(f.q) params.set("q", f.q);
+  return params.toString();
+}
+
+async function loadWebOrders(){
+  try{ DB.webOrders = await api("/web-orders?" + buildWebOrderQuery()); }
+  catch(err){ UI.saveError = err.message; }
 }
 
 async function reloadBatchAndList(batchId){
@@ -490,12 +671,125 @@ function renderApp(app){
 }
 
 function renderTabContent(){
+  if(UI.tab === "dashboard") return renderDashboardTab();
   if(UI.tab === "batches"){
     return UI.openBatchId ? renderBatchDetail() : renderBatchesTab();
   }
   if(UI.tab === "warehouse") return renderWarehouseTab();
+  if(UI.tab === "customers") return renderCustomersTab();
   if(UI.tab === "users") return renderUsersTab();
+  if(UI.tab === "logs") return renderLogsTab();
+  if(UI.tab === "integration") return renderIntegrationTab();
   return "";
+}
+
+/* ===================== dashboard ===================== */
+
+function renderDashboardTab(){
+  const d = DB.dashboard;
+  if(!d){
+    return `<div class="empty"><p><span class="spin"></span> در حال بارگذاری گزارش…</p></div>`;
+  }
+  if(!d.batches && !d.warehouse && !d.users){
+    return `<div class="empty"><p>شما به هیچ بخشی دسترسی ندارید تا گزارشی نمایش داده شود.</p></div>`;
+  }
+
+  let html = "";
+
+  if(d.batches){
+    const b = d.batches;
+    html += `
+      <div class="section-head"><h2>گزارش کشت‌ها</h2></div>
+      <div class="stat-row" style="grid-template-columns:repeat(3,1fr);">
+        <div class="chip"><div class="v">${fmt(b.totalBatches)}</div><div class="l">تعداد کل کشت‌ها</div></div>
+        <div class="chip warn"><div class="v">${fmt(b.activeCount)}</div><div class="l">در حال آماده‌سازی</div></div>
+        <div class="chip good"><div class="v">${fmt(b.readyCount)}</div><div class="l">آماده برداشت</div></div>
+      </div>
+      <div class="stat-row" style="grid-template-columns:repeat(3,1fr);">
+        <div class="chip"><div class="v">${fmt(b.totalProduction)}</div><div class="l">مجموع تولید</div></div>
+        <div class="chip"><div class="v">${fmt(b.totalSold)}</div><div class="l">مجموع فروخته‌شده</div></div>
+        <div class="chip good"><div class="v">${fmt(b.totalRemaining)}</div><div class="l">مجموع باقیمانده قابل فروش</div></div>
+      </div>
+      <div class="stat-row" style="grid-template-columns:repeat(3,1fr);">
+        <div class="chip"><div class="v">${fmt(b.totalPurchaseCost)}</div><div class="l">جمع خرید (تومان)</div></div>
+        <div class="chip"><div class="v">${fmt(b.totalRevenue)}</div><div class="l">جمع فروش (تومان)</div></div>
+        <div class="chip ${b.totalProfit >= 0 ? 'good' : 'warn'}"><div class="v">${fmt(b.totalProfit)}</div><div class="l">سود ناخالص کل (تومان)</div></div>
+      </div>
+
+      <div class="two-col">
+        <div class="list-card">
+          <div class="list-card-head"><h3>نزدیک‌ترین کشت‌ها به برداشت</h3></div>
+          ${b.upcoming.length === 0 ? `<div class="empty-mini">کشتی در حال آماده‌سازی نیست.</div>` :
+            b.upcoming.map(x => `
+              <div class="invoice-row">
+                <div class="r1"><span class="name">${esc(x.name)}</span><span class="date">${fmt(x.daysRemaining)} روز مانده</span></div>
+                <div style="margin-top:6px;">${renderGauge(x)}</div>
+              </div>
+            `).join("")}
+        </div>
+        <div class="list-card">
+          <div class="list-card-head"><h3>آخرین فاکتورهای خرید</h3></div>
+          ${b.recentPurchases.length === 0 ? `<div class="empty-mini">فاکتور خریدی ثبت نشده است.</div>` :
+            b.recentPurchases.map(p => `
+              <div class="invoice-row">
+                <div class="r1"><span class="name">${esc(p.itemName)}</span><span class="date">${fmtDate(p.date)}</span></div>
+                <div class="r2"><span>کشت: ${esc(p.batchName)}</span><span class="tot">${fmt(p.total)} تومان</span></div>
+              </div>
+            `).join("")}
+        </div>
+      </div>
+      <div class="list-card" style="margin-top:20px;">
+        <div class="list-card-head"><h3>آخرین فاکتورهای فروش</h3></div>
+        ${b.recentSales.length === 0 ? `<div class="empty-mini">فاکتور فروشی ثبت نشده است.</div>` :
+          b.recentSales.map(s => `
+            <div class="invoice-row">
+              <div class="r1"><span class="name">${esc(s.customer || "مشتری بدون نام")}</span><span class="date">${fmtDate(s.date)}</span></div>
+              <div class="r2"><span>کشت: ${esc(s.batchName)}</span><span class="tot">${fmt(s.total)} تومان</span></div>
+            </div>
+          `).join("")}
+      </div>
+    `;
+  }
+
+  if(d.warehouse){
+    const w = d.warehouse;
+    html += `
+      <div class="section-head" style="margin-top:28px;"><h2>گزارش انبار کالا</h2></div>
+      <div class="stat-row" style="grid-template-columns:repeat(3,1fr);">
+        <div class="chip"><div class="v">${fmt(w.totalItems)}</div><div class="l">تعداد اقلام</div></div>
+        <div class="chip warn"><div class="v">${fmt(w.lowStockCount)}</div><div class="l">رو به اتمام (≤۱۰)</div></div>
+        <div class="chip"><div class="v" style="color:var(--danger-text);">${fmt(w.outOfStockCount)}</div><div class="l">ناموجود</div></div>
+      </div>
+      ${(w.lowStockItems.length || w.outOfStockItems.length) ? `
+      <div class="list-card">
+        <div class="list-card-head"><h3>کالاهای نیازمند توجه</h3></div>
+        ${[...w.outOfStockItems, ...w.lowStockItems].map(it => `
+          <div class="invoice-row">
+            <div class="r1">
+              <span class="name">${esc(it.name)}</span>
+              <span class="stock ${toNum(it.stock) <= 0 ? 'stock-out' : 'stock-low'}">${fmt(it.stock)} ${esc(it.unit)}</span>
+            </div>
+            ${it.location ? `<div class="r3">محل نگهداری: ${esc(it.location)}</div>` : ""}
+          </div>
+        `).join("")}
+      </div>` : `<div class="empty-mini" style="margin-top:8px;">همه‌ی کالاها موجودی کافی دارند.</div>`}
+    `;
+  }
+
+  if(d.users){
+    const u = d.users;
+    html += `
+      <div class="section-head" style="margin-top:28px;"><h2>گزارش کاربران</h2></div>
+      <div class="stat-row" style="grid-template-columns:repeat(4,1fr);">
+        <div class="chip"><div class="v">${fmt(u.totalUsers)}</div><div class="l">تعداد کاربران</div></div>
+        <div class="chip good"><div class="v">${fmt(u.adminCount)}</div><div class="l">مدیر سیستم</div></div>
+        <div class="chip"><div class="v">${fmt(u.batchesAccessCount)}</div><div class="l">دسترسی کشت‌ها</div></div>
+        <div class="chip"><div class="v">${fmt(u.warehouseAccessCount)}</div><div class="l">دسترسی انبار</div></div>
+      </div>
+    `;
+  }
+
+  return html;
 }
 
 /* ===================== batches ===================== */
@@ -593,11 +887,12 @@ function renderBatchDetail(){
         </div>
       </div>
       <div style="margin-top:16px;">${renderGauge(b)}</div>
-      <div class="stat-row four" style="margin-top:16px;margin-bottom:0;">
+      <div class="stat-row five" style="margin-top:16px;margin-bottom:0;">
         <div class="chip"><div class="v" style="font-size:16px;">${fmt(b.productionQty)} ${esc(b.unit)}</div><div class="l">تولید کل</div></div>
         <div class="chip"><div class="v" style="font-size:16px;">${fmt(b.soldQty)} ${esc(b.unit)}</div><div class="l">فروخته شده</div></div>
         <div class="chip good"><div class="v" style="font-size:16px;">${fmt(b.remaining)} ${esc(b.unit)}</div><div class="l">باقیمانده قابل فروش</div></div>
-        <div class="chip ${b.profit >= 0 ? 'good' : 'warn'}"><div class="v" style="font-size:16px;">${fmt(b.profit)}</div><div class="l">سود ناخالص (تومان)</div></div>
+        <div class="chip"><div class="v" style="font-size:16px;">${fmt(b.purchaseCost)}</div><div class="l">جمع کل فاکتورهای خرید (تومان)</div></div>
+        <div class="chip"><div class="v" style="font-size:16px;">${fmt(b.revenue)}</div><div class="l">جمع کل فاکتورهای فروش (تومان)</div></div>
       </div>
     </div>
 
@@ -636,7 +931,7 @@ function renderBatchDetail(){
           b.sales.slice().sort((a,x)=> a.date < x.date ? 1 : -1).map(s => `
             <div class="invoice-row">
               <div class="r1"><span class="name">${esc(s.customer || "مشتری بدون نام")}</span><span class="date">${fmtDate(s.date)}</span></div>
-              <div class="r2"><span>${fmt(s.qty)} ${esc(b.unit)} × ${fmt(s.unitPrice)} تومان</span><span class="tot">${fmt(s.total)} تومان</span></div>
+              <div class="r2"><span>${fmt(s.qty)} ${esc(s.unit || b.unit)} × ${fmt(s.unitPrice)} تومان</span><span class="tot">${fmt(s.total)} تومان</span></div>
               <div class="r4">
                 <button class="btn small ghost" data-action="edit-sale" data-id="${s.id}">ویرایش</button>
                 <button class="btn small danger" data-action="delete-sale" data-id="${s.id}" data-batch-id="${b.id}">حذف</button>
@@ -682,6 +977,46 @@ function renderWarehouseTab(){
                     <button class="btn small secondary" data-action="stock-down" data-id="${it.id}">−۱</button>
                     <button class="btn small ghost" data-action="edit-item" data-id="${it.id}">ویرایش</button>
                     <button class="btn small danger" data-action="delete-item" data-id="${it.id}">حذف</button>
+                  </div>
+                </td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>`}
+  `;
+}
+
+/* ===================== customers ===================== */
+
+function renderCustomersTab(){
+  return `
+    <div class="stat-row two">
+      <div class="chip"><div class="v">${fmt(DB.customers.length)}</div><div class="l">تعداد مشتریان</div></div>
+      <div class="chip good"><div class="v">${fmt(DB.customers.filter(c=>c.phone).length)}</div><div class="l">دارای شماره تماس</div></div>
+    </div>
+    <div class="section-head">
+      <h2>مشتریان</h2>
+      <button class="btn primary" data-action="new-customer">+ مشتری جدید</button>
+    </div>
+    ${DB.customers.length === 0 ? `
+      <div class="empty">
+        <p>هنوز مشتری‌ای ثبت نشده است.</p>
+        <button class="btn primary" data-action="new-customer">افزودن مشتری</button>
+      </div>` : `
+      <div class="wh-card-wrap">
+        <table class="wh">
+          <thead><tr><th>نام و نام خانوادگی</th><th>شماره تماس</th><th>آدرس</th><th>عملیات</th></tr></thead>
+          <tbody>
+            ${DB.customers.map(c => `
+              <tr>
+                <td>${esc(c.fullName)}</td>
+                <td style="color:var(--muted);white-space:nowrap;">${c.phone ? esc(c.phone) : '<span style="color:var(--muted2)">—</span>'}</td>
+                <td style="color:var(--muted);max-width:280px;">${c.address ? esc(c.address) : '<span style="color:var(--muted2)">—</span>'}</td>
+                <td>
+                  <div class="wh-actions">
+                    <button class="btn small ghost" data-action="edit-customer" data-id="${c.id}">ویرایش</button>
+                    <button class="btn small danger" data-action="delete-customer" data-id="${c.id}">حذف</button>
                   </div>
                 </td>
               </tr>
@@ -747,6 +1082,217 @@ function renderUsersTab(){
   `;
 }
 
+/* ===================== activity logs ===================== */
+
+const ENTITY_TYPE_LABELS = {
+  batch: "کشت", purchase: "فاکتور خرید", sale: "فاکتور فروش",
+  item: "کالای انبار", user: "کاربر", auth: "ورود به سیستم",
+};
+const ACTION_LABELS = {
+  LOGIN: "ورود",
+  BATCH_CREATE: "ایجاد کشت", BATCH_UPDATE: "ویرایش کشت", BATCH_DELETE: "حذف کشت",
+  PURCHASE_CREATE: "ثبت فاکتور خرید", PURCHASE_UPDATE: "ویرایش فاکتور خرید", PURCHASE_DELETE: "حذف فاکتور خرید",
+  SALE_CREATE: "ثبت فاکتور فروش", SALE_UPDATE: "ویرایش فاکتور فروش", SALE_DELETE: "حذف فاکتور فروش",
+  ITEM_CREATE: "ایجاد کالا", ITEM_UPDATE: "ویرایش کالا", ITEM_DELETE: "حذف کالا", ITEM_STOCK_ADJUST: "تغییر موجودی",
+  USER_CREATE: "ایجاد کاربر", USER_UPDATE: "ویرایش کاربر", USER_DELETE: "حذف کاربر",
+};
+function actionBadgeTone(action){
+  if(action.endsWith("_DELETE")) return "danger";
+  if(action.endsWith("_CREATE") || action === "LOGIN") return "ready";
+  return "pending";
+}
+
+function renderLogsTab(){
+  const f = UI.logFilters;
+  const data = DB.logs;
+  const totalPages = data ? Math.max(1, Math.ceil(data.total / data.limit)) : 1;
+
+  return `
+    <div class="section-head">
+      <h2>لاگ فعالیت‌های کاربران</h2>
+      <button class="btn secondary" data-action="logs-refresh">↻ به‌روزرسانی</button>
+    </div>
+
+    <div class="panel" style="margin-bottom:16px;">
+      <div class="row2" style="grid-template-columns:1fr 1fr 1fr; gap:12px;">
+        <label class="field" style="margin-bottom:0;"><span class="lbl">بخش</span>
+          <select class="inp" id="log-f-entityType">
+            <option value="">همه</option>
+            ${Object.entries(ENTITY_TYPE_LABELS).map(([k,v]) => `<option value="${k}" ${f.entityType===k?'selected':''}>${v}</option>`).join("")}
+          </select>
+        </label>
+        <label class="field" style="margin-bottom:0;"><span class="lbl">نوع عملیات</span>
+          <select class="inp" id="log-f-action">
+            <option value="">همه</option>
+            ${Object.entries(ACTION_LABELS).map(([k,v]) => `<option value="${k}" ${f.action===k?'selected':''}>${v}</option>`).join("")}
+          </select>
+        </label>
+        <label class="field" style="margin-bottom:0;"><span class="lbl">جستجو در توضیحات</span>
+          <input class="inp" id="log-f-q" value="${esc(f.q)}" placeholder="مثلاً نام کشت یا کاربر" />
+        </label>
+      </div>
+      <div class="modal-actions" style="margin-top:14px;">
+        <button class="btn primary" data-action="logs-apply-filter">اعمال فیلتر</button>
+        <button class="btn ghost" data-action="logs-clear-filter">پاک کردن فیلترها</button>
+      </div>
+    </div>
+
+    ${!data ? `<div class="empty"><p><span class="spin"></span> در حال بارگذاری…</p></div>` :
+      data.logs.length === 0 ? `<div class="empty"><p>موردی با این فیلتر یافت نشد.</p></div>` : `
+      <div class="wh-card-wrap">
+        <table class="wh">
+          <thead><tr><th>زمان</th><th>کاربر</th><th>عملیات</th><th>بخش</th><th>توضیحات</th></tr></thead>
+          <tbody>
+            ${data.logs.map(l => `
+              <tr>
+                <td style="white-space:nowrap;color:var(--muted)">${fmtDateTime(l.createdAt)}</td>
+                <td>
+                  <div style="font-weight:700;">${esc(l.fullName || "—")}</div>
+                  <div style="font-size:11.5px;color:var(--muted2);">${esc(l.username || "")}</div>
+                </td>
+                <td><span class="badge ${actionBadgeTone(l.action)}">${esc(ACTION_LABELS[l.action] || l.action)}</span></td>
+                <td style="color:var(--muted)">${esc(ENTITY_TYPE_LABELS[l.entityType] || l.entityType)}</td>
+                <td>${esc(l.description)}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;flex-wrap:wrap;gap:10px;">
+        <span style="font-size:12.5px;color:var(--muted2);">مجموع ${fmt(data.total)} رکورد — صفحه ${fmt(data.page)} از ${fmt(totalPages)}</span>
+        <div style="display:flex;gap:8px;">
+          <button class="btn small secondary" data-action="logs-prev-page" ${data.page<=1 ? 'disabled':''}>صفحه قبل</button>
+          <button class="btn small secondary" data-action="logs-next-page" ${data.page>=totalPages ? 'disabled':''}>صفحه بعد</button>
+        </div>
+      </div>
+    `}
+  `;
+}
+
+/* ===================== اتصال فروشگاه اینترنتی (وردپرس/ووکامرس) ===================== */
+
+const ORDER_STATUS_LABELS = {
+  pending: "در انتظار پرداخت", processing: "در حال پردازش", "on-hold": "در انتظار بررسی",
+  completed: "تکمیل‌شده", cancelled: "لغوشده", refunded: "بازگشت‌وجه", failed: "ناموفق", trash: "حذف‌شده",
+};
+
+function renderIntegrationTab(){
+  const s = DB.integrationSettings;
+  const orders = DB.webOrders;
+
+  return `
+    <div class="section-head"><h2>اتصال فروشگاه اینترنتی (وردپرس/ووکامرس)</h2></div>
+
+    ${UI.integrationMessage ? `<div class="save-err" style="background:var(--good-bg);color:var(--primary-dark);">${esc(UI.integrationMessage)}</div>` : ""}
+
+    ${!s ? `<div class="empty"><p><span class="spin"></span> در حال بارگذاری تنظیمات…</p></div>` : `
+    <div class="panel" style="margin-bottom:20px;">
+      <div class="panel-head" style="margin-bottom:14px;">
+        <div>
+          <h2 style="font-size:15px;">تنظیمات اتصال</h2>
+          <div class="meta">فروشگاه باید ووکامرس نصب و روی HTTPS باشد.</div>
+        </div>
+        ${s.isConnected
+          ? `<span class="badge ready">متصل</span>`
+          : `<span class="badge pending">هنوز تست نشده / متصل نیست</span>`}
+      </div>
+
+      <label class="field"><span class="lbl">آدرس سایت وردپرس</span>
+        <input class="inp" id="int-siteUrl" value="${esc(s.siteUrl)}" placeholder="https://example.com" />
+      </label>
+      <div class="row2">
+        <label class="field"><span class="lbl">Consumer Key</span>
+          <input class="inp" id="int-consumerKey" placeholder="${s.consumerKeyMasked ? esc(s.consumerKeyMasked) + ' (برای تغییر، مقدار جدید را وارد کنید)' : 'ck_...'}" />
+        </label>
+        <label class="field"><span class="lbl">Consumer Secret</span>
+          <input class="inp" id="int-consumerSecret" type="password" placeholder="${s.consumerSecretMasked ? esc(s.consumerSecretMasked) + ' (برای تغییر، مقدار جدید را وارد کنید)' : 'cs_...'}" />
+        </label>
+      </div>
+
+      <div class="modal-actions" style="margin-top:10px;">
+        <button class="btn primary" data-action="integration-save" ${UI.integrationBusy?'disabled':''}>ذخیره تنظیمات</button>
+        <button class="btn secondary" data-action="integration-test" ${UI.integrationBusy?'disabled':''}>تست اتصال</button>
+        <button class="btn secondary" data-action="integration-sync" ${UI.integrationBusy?'disabled':''}>
+          ${UI.integrationBusy ? '<span class="spin"></span> در حال همگام‌سازی…' : 'همگام‌سازی سفارش‌ها'}
+        </button>
+      </div>
+
+      ${s.lastSyncAt ? `
+        <div style="margin-top:14px;font-size:12.5px;color:var(--muted);">
+          آخرین همگام‌سازی: ${fmtDateTime(s.lastSyncAt)} —
+          <span style="color:${s.lastSyncStatus==='success' ? 'var(--primary)' : 'var(--danger-text)'};">
+            ${esc(s.lastSyncMessage || '')}
+          </span>
+        </div>
+      ` : ""}
+    </div>
+
+    <div class="section-head"><h2>سفارش‌های همگام‌سازی‌شده از سایت</h2></div>
+    <div class="panel" style="margin-bottom:16px;">
+      <div class="row2" style="grid-template-columns:1fr 1fr 1fr; gap:12px;">
+        <label class="field" style="margin-bottom:0;"><span class="lbl">وضعیت سفارش</span>
+          <select class="inp" id="wo-f-status">
+            <option value="">همه</option>
+            ${Object.entries(ORDER_STATUS_LABELS).map(([k,v]) => `<option value="${k}" ${UI.webOrderFilters.status===k?'selected':''}>${v}</option>`).join("")}
+          </select>
+        </label>
+        <label class="field" style="margin-bottom:0;grid-column:span 2;"><span class="lbl">جستجو (نام مشتری یا شماره سفارش)</span>
+          <input class="inp" id="wo-f-q" value="${esc(UI.webOrderFilters.q)}" />
+        </label>
+      </div>
+      <div class="modal-actions" style="margin-top:14px;">
+        <button class="btn primary" data-action="weborders-apply-filter">اعمال فیلتر</button>
+        <button class="btn ghost" data-action="weborders-clear-filter">پاک کردن فیلترها</button>
+      </div>
+    </div>
+
+    ${!orders ? `<div class="empty"><p><span class="spin"></span> در حال بارگذاری سفارش‌ها…</p></div>` :
+      orders.orders.length === 0 ? `
+        <div class="empty">
+          <p>هنوز سفارشی همگام‌سازی نشده است. تنظیمات را ذخیره کنید، اتصال را تست کنید و روی «همگام‌سازی سفارش‌ها» بزنید.</p>
+        </div>` : `
+      <div class="stat-row two">
+        <div class="chip"><div class="v">${fmt(orders.total)}</div><div class="l">تعداد سفارش (با فیلتر فعلی)</div></div>
+        <div class="chip good"><div class="v">${fmt(orders.totalRevenue)}</div><div class="l">جمع مبلغ (با فیلتر فعلی)</div></div>
+      </div>
+      <div class="wh-card-wrap">
+        <table class="wh">
+          <thead><tr><th>شماره سفارش</th><th>مشتری</th><th>اقلام</th><th>مبلغ</th><th>وضعیت</th><th>تاریخ</th><th>کشت مرتبط</th></tr></thead>
+          <tbody>
+            ${orders.orders.map(o => `
+              <tr>
+                <td>#${esc(o.orderNumber || o.externalOrderId)}</td>
+                <td>
+                  <div style="font-weight:700;">${esc(o.customerName || "—")}</div>
+                  ${o.customerEmail ? `<div style="font-size:11.5px;color:var(--muted2);">${esc(o.customerEmail)}</div>` : ""}
+                </td>
+                <td style="color:var(--muted);max-width:220px;">${esc(o.itemsSummary || "—")}</td>
+                <td style="font-weight:700;">${fmt(o.total)} ${esc(o.currency || "")}</td>
+                <td><span class="badge ${o.status==='completed'?'ready':(o.status==='cancelled'||o.status==='failed'?'danger':'pending')}">${esc(ORDER_STATUS_LABELS[o.status] || o.status || "—")}</span></td>
+                <td style="white-space:nowrap;color:var(--muted)">${fmtDate(o.orderDate)}</td>
+                <td>
+                  <select class="inp" style="min-width:140px;" data-action="weborder-assign-batch" data-id="${o.id}">
+                    <option value="">— بدون اتصال —</option>
+                    ${DB.batches.map(b => `<option value="${b.id}" ${o.batchId===b.id?'selected':''}>${esc(b.name)}</option>`).join("")}
+                  </select>
+                </td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;flex-wrap:wrap;gap:10px;">
+        <span style="font-size:12.5px;color:var(--muted2);">صفحه ${fmt(orders.page)} از ${fmt(Math.max(1, Math.ceil(orders.total / orders.limit)))}</span>
+        <div style="display:flex;gap:8px;">
+          <button class="btn small secondary" data-action="weborders-prev-page" ${orders.page<=1 ? 'disabled':''}>صفحه قبل</button>
+          <button class="btn small secondary" data-action="weborders-next-page" ${orders.page>=Math.max(1, Math.ceil(orders.total / orders.limit)) ? 'disabled':''}>صفحه بعد</button>
+        </div>
+      </div>
+    `}
+  `}
+  `;
+}
+
 /* ===================== modals ===================== */
 
 function closeModal(){ document.getElementById("modal-root").innerHTML = ""; }
@@ -782,7 +1328,7 @@ function openBatchModal(batch){
       <input class="inp" id="f-name" value="${esc(b.name)}" placeholder="مثلاً کشت شماره ۱ — کود دامی" />
     </label>
     <div class="row2">
-      <label class="field"><span class="lbl">تاریخ شروع</span><input type="date" class="inp" id="f-startDate" value="${esc(b.startDate)}" /></label>
+      <label class="field"><span class="lbl">تاریخ شروع</span>${jalaliDateFieldHtml("f-startDate", b.startDate)}</label>
       <label class="field"><span class="lbl">روز تا آماده شدن</span><input type="number" min="0" class="inp" id="f-readyDays" value="${esc(b.readyDays)}" /></label>
     </div>
     <div class="row2">
@@ -797,6 +1343,7 @@ function openBatchModal(batch){
       <button class="btn secondary full" data-action="close-modal">انصراف</button>
     </div>
   `);
+  wireJalaliDateField("f-startDate");
 }
 
 async function saveBatchFromModal(id){
@@ -837,7 +1384,7 @@ async function openPurchaseModal(batchId, purchase){
   const p = purchase || { batchId, date: todayISO(), itemName:"", qty:"", unit:"کیلوگرم", unitPrice:"", supplier:"", note:"" };
   modalShell(editing ? "ویرایش فاکتور خرید" : "فاکتور خرید جدید", `
     <div id="modal-err" class="login-err" style="display:none;"></div>
-    <label class="field"><span class="lbl">تاریخ</span><input type="date" class="inp" id="f-date" value="${esc(p.date)}" /></label>
+    <label class="field"><span class="lbl">تاریخ</span>${jalaliDateFieldHtml("f-date", p.date)}</label>
     <label class="field"><span class="lbl">نام کالا / ماده اولیه</span>
       <input class="inp" id="f-itemName" list="item-names" value="${esc(p.itemName)}" placeholder="مثلاً کاه، کود دامی، ضایعات کشاورزی" />
       <span class="hint">اگر نام یک کالای موجود در انبار را وارد کنید، موجودی آن به‌طور خودکار افزایش می‌یابد.</span>
@@ -864,6 +1411,7 @@ async function openPurchaseModal(batchId, purchase){
   };
   document.getElementById("f-qty").addEventListener("input", upd);
   document.getElementById("f-unitPrice").addEventListener("input", upd);
+  wireJalaliDateField("f-date");
 }
 
 async function savePurchaseFromModal(id, batchId){
@@ -896,17 +1444,35 @@ async function deletePurchase(id, batchId){
 
 /* ---- sale modal ---- */
 
-function openSaleModal(batchId, sale){
+async function openSaleModal(batchId, sale){
+  try{ DB.customers = await api("/customers"); }catch(e){ /* دراپ‌داون فقط بدون گزینه می‌ماند */ }
   const editing = !!sale;
   const batch = (UI.batchDetail && UI.batchDetail.id === batchId) ? UI.batchDetail : DB.batches.find(x => x.id === batchId);
-  const s = sale || { batchId, date: todayISO(), qty:"", unitPrice:"", customer:"", note:"" };
+  const s = sale || { batchId, date: todayISO(), qty:"", unitPrice:"", customer:"", customerId:"", note:"" };
+
+  const matchedCustomer = s.customerId ? DB.customers.find(c => c.id === s.customerId) : null;
+  const isCustomCustomer = !!s.customer && !matchedCustomer;
+
   modalShell(editing ? "ویرایش فاکتور فروش" : "فاکتور فروش جدید", `
     <div id="modal-err" class="login-err" style="display:none;"></div>
-    <label class="field"><span class="lbl">تاریخ</span><input type="date" class="inp" id="f-date" value="${esc(s.date)}" /></label>
-    <label class="field"><span class="lbl">مقدار (${esc(batch ? batch.unit : "")})</span><input type="number" min="0" class="inp" id="f-qty" value="${esc(s.qty)}" /></label>
+    <label class="field"><span class="lbl">تاریخ</span>${jalaliDateFieldHtml("f-date", s.date)}</label>
+    <div class="row2">
+      <label class="field"><span class="lbl">مقدار</span><input type="number" min="0" class="inp" id="f-qty" value="${esc(s.qty)}" /></label>
+      <label class="field"><span class="lbl">واحد</span>
+        <select class="inp" id="f-unit">${UNITS.map(u=>`<option value="${u}" ${(s.unit || (batch?batch.unit:UNITS[0]))===u?'selected':''}>${u}</option>`).join("")}</select>
+      </label>
+    </div>
     <label class="field"><span class="lbl">قیمت واحد (تومان)</span><input type="number" min="0" class="inp" id="f-unitPrice" value="${esc(s.unitPrice)}" /></label>
     <div class="total-preview">جمع فاکتور: <b id="f-total-preview">${fmt(toNum(s.qty)*toNum(s.unitPrice))}</b> تومان</div>
-    <label class="field"><span class="lbl">مشتری (اختیاری)</span><input class="inp" id="f-customer" value="${esc(s.customer)}" /></label>
+    <label class="field"><span class="lbl">مشتری (اختیاری)</span>
+      <select class="inp" id="f-customerId">
+        <option value="">— بدون مشتری خاص —</option>
+        ${DB.customers.map(c => `<option value="${c.id}" ${matchedCustomer && matchedCustomer.id===c.id ? 'selected':''}>${esc(c.fullName)}${c.phone ? ' — ' + esc(c.phone) : ''}</option>`).join("")}
+        <option value="__custom__" ${isCustomCustomer ? 'selected':''}>نام دیگر (تایپ دستی)</option>
+      </select>
+      <input class="inp" id="f-customer-custom" style="margin-top:8px;${isCustomCustomer ? '' : 'display:none;'}" value="${esc(isCustomCustomer ? s.customer : '')}" placeholder="نام مشتری" />
+      ${DB.customers.length === 0 ? `<span class="hint">هنوز مشتری‌ای در بخش «مشتریان» ثبت نشده؛ می‌توانید همین‌جا نام آزاد تایپ کنید.</span>` : ""}
+    </label>
     <label class="field"><span class="lbl">توضیحات (اختیاری)</span><textarea class="inp" id="f-note" rows="2">${esc(s.note)}</textarea></label>
     <div class="modal-actions">
       <button class="btn primary full" data-action="save-sale" data-id="${editing ? s.id : ''}" data-batch-id="${batchId}">ذخیره</button>
@@ -919,15 +1485,32 @@ function openSaleModal(batchId, sale){
   };
   document.getElementById("f-qty").addEventListener("input", upd);
   document.getElementById("f-unitPrice").addEventListener("input", upd);
+  document.getElementById("f-customerId").addEventListener("change", (e) => {
+    document.getElementById("f-customer-custom").style.display = e.target.value === "__custom__" ? "" : "none";
+  });
+  wireJalaliDateField("f-date");
 }
 
 async function saveSaleFromModal(id, batchId){
   const qty = document.getElementById("f-qty").value;
   const unitPrice = document.getElementById("f-unitPrice").value;
   if(!qty || !unitPrice){ modalErr("مقدار و قیمت واحد الزامی است."); document.getElementById("modal-err").style.display="block"; return; }
+
+  const customerSel = document.getElementById("f-customerId").value;
+  let customerId = "", customerName = "";
+  if(customerSel === "__custom__"){
+    customerName = document.getElementById("f-customer-custom").value.trim();
+  }else if(customerSel){
+    customerId = customerSel;
+    const c = DB.customers.find(x => x.id === customerSel);
+    customerName = c ? c.fullName : "";
+  }
+
   const payload = {
     batchId, date: document.getElementById("f-date").value, qty: toNum(qty), unitPrice: toNum(unitPrice),
-    customer: document.getElementById("f-customer").value.trim(),
+    unit: document.getElementById("f-unit").value,
+    customer: customerName,
+    customerId: customerId || null,
     note: document.getElementById("f-note").value.trim(),
   };
   try{
@@ -1005,6 +1588,53 @@ async function adjustStock(id, delta){
 async function loadItems(){ DB.items = await api("/items"); render(); }
 async function loadBatches(){ DB.batches = await api("/batches"); render(); }
 async function loadUsers(){ DB.users = await api("/users"); render(); }
+async function loadCustomers(){ DB.customers = await api("/customers"); render(); }
+
+/* ---- customer modal ---- */
+
+function openCustomerModal(customer){
+  const editing = !!customer;
+  const c = customer || { fullName:"", phone:"", address:"" };
+  modalShell(editing ? "ویرایش مشتری" : "مشتری جدید", `
+    <div id="modal-err" class="login-err" style="display:none;"></div>
+    <label class="field"><span class="lbl">نام و نام خانوادگی</span>
+      <input class="inp" id="f-fullName" value="${esc(c.fullName)}" placeholder="مثلاً رضا احمدی" />
+    </label>
+    <label class="field"><span class="lbl">شماره تماس (اختیاری)</span>
+      <input class="inp" id="f-phone" value="${esc(c.phone)}" placeholder="09xxxxxxxxx" />
+    </label>
+    <label class="field"><span class="lbl">آدرس (اختیاری)</span>
+      <textarea class="inp" id="f-address" rows="2">${esc(c.address)}</textarea>
+    </label>
+    <div class="modal-actions">
+      <button class="btn primary full" data-action="save-customer" data-id="${editing ? c.id : ''}">ذخیره</button>
+      <button class="btn secondary full" data-action="close-modal">انصراف</button>
+    </div>
+  `);
+}
+
+async function saveCustomerFromModal(id){
+  const fullName = document.getElementById("f-fullName").value.trim();
+  if(!fullName){ modalErr("نام و نام خانوادگی الزامی است."); document.getElementById("modal-err").style.display="block"; return; }
+  const payload = {
+    fullName,
+    phone: document.getElementById("f-phone").value.trim(),
+    address: document.getElementById("f-address").value.trim(),
+  };
+  try{
+    if(id) await api("/customers/" + id, { method:"PUT", body: payload });
+    else await api("/customers", { method:"POST", body: payload });
+    closeModal();
+    await loadCustomers();
+  }catch(err){
+    modalErr(err.message); document.getElementById("modal-err").style.display="block";
+  }
+}
+
+async function deleteCustomer(id){
+  try{ await api("/customers/" + id, { method:"DELETE" }); await loadCustomers(); }
+  catch(err){ UI.saveError = err.message; render(); }
+}
 
 /* ---- user modal ---- */
 
@@ -1121,6 +1751,11 @@ document.addEventListener("click", async (e) => {
     case "delete-sale": await deleteSale(id, batchId); break;
     case "save-sale": await saveSaleFromModal(id || null, batchId); break;
 
+    case "new-customer": openCustomerModal(null); break;
+    case "edit-customer": openCustomerModal(DB.customers.find(c => c.id === id)); break;
+    case "delete-customer": await deleteCustomer(id); break;
+    case "save-customer": await saveCustomerFromModal(id || null); break;
+
     case "new-item": openItemModal(null); break;
     case "edit-item": openItemModal(DB.items.find(i => i.id === id)); break;
     case "delete-item": await deleteItem(id); break;
@@ -1133,9 +1768,108 @@ document.addEventListener("click", async (e) => {
     case "delete-user": await deleteUser(id); break;
     case "save-user": await saveUserFromModal(id || null); break;
 
+    case "logs-refresh": await loadLogs(); render(); break;
+    case "logs-apply-filter":
+      UI.logFilters.entityType = document.getElementById("log-f-entityType").value;
+      UI.logFilters.action = document.getElementById("log-f-action").value;
+      UI.logFilters.q = document.getElementById("log-f-q").value.trim();
+      UI.logFilters.page = 1;
+      await loadLogs(); render();
+      break;
+    case "logs-clear-filter":
+      UI.logFilters = { entityType:"", action:"", q:"", page:1, limit:50 };
+      await loadLogs(); render();
+      break;
+    case "logs-prev-page":
+      if(UI.logFilters.page > 1){ UI.logFilters.page -= 1; await loadLogs(); render(); }
+      break;
+    case "logs-next-page":
+      UI.logFilters.page += 1; await loadLogs(); render();
+      break;
+
+    case "integration-save": await saveIntegrationSettings(); break;
+    case "integration-test": await testIntegrationConnection(); break;
+    case "integration-sync": await syncIntegrationOrders(); break;
+
+    case "weborders-apply-filter":
+      UI.webOrderFilters.status = document.getElementById("wo-f-status").value;
+      UI.webOrderFilters.q = document.getElementById("wo-f-q").value.trim();
+      UI.webOrderFilters.page = 1;
+      await loadWebOrders(); render();
+      break;
+    case "weborders-clear-filter":
+      UI.webOrderFilters = { status:"", q:"", page:1, limit:30 };
+      await loadWebOrders(); render();
+      break;
+    case "weborders-prev-page":
+      if(UI.webOrderFilters.page > 1){ UI.webOrderFilters.page -= 1; await loadWebOrders(); render(); }
+      break;
+    case "weborders-next-page":
+      UI.webOrderFilters.page += 1; await loadWebOrders(); render();
+      break;
+
     case "close-modal": closeModal(); break;
   }
 });
+
+document.addEventListener("change", async (e) => {
+  const el = e.target.closest('[data-action="weborder-assign-batch"]');
+  if(!el) return;
+  const id = el.dataset.id;
+  const batchId = el.value || null;
+  try{
+    await api("/web-orders/" + id + "/assign-batch", { method:"PATCH", body:{ batchId } });
+    await loadWebOrders();
+    render();
+  }catch(err){
+    UI.saveError = err.message;
+    render();
+  }
+});
+
+async function saveIntegrationSettings(){
+  UI.integrationBusy = true; UI.integrationMessage = ""; render();
+  const payload = {
+    siteUrl: document.getElementById("int-siteUrl").value.trim(),
+    consumerKey: document.getElementById("int-consumerKey").value.trim(),
+    consumerSecret: document.getElementById("int-consumerSecret").value.trim(),
+  };
+  try{
+    DB.integrationSettings = await api("/integrations/woocommerce", { method:"PUT", body: payload });
+    UI.integrationMessage = "تنظیمات ذخیره شد. حالا اتصال را تست کنید.";
+  }catch(err){
+    UI.saveError = err.message;
+  }
+  UI.integrationBusy = false;
+  render();
+}
+
+async function testIntegrationConnection(){
+  UI.integrationBusy = true; UI.integrationMessage = ""; UI.saveError = ""; render();
+  try{
+    const result = await api("/integrations/woocommerce/test", { method:"POST" });
+    UI.integrationMessage = result.message;
+    DB.integrationSettings = await api("/integrations/woocommerce");
+  }catch(err){
+    UI.saveError = err.message;
+  }
+  UI.integrationBusy = false;
+  render();
+}
+
+async function syncIntegrationOrders(){
+  UI.integrationBusy = true; UI.integrationMessage = ""; UI.saveError = ""; render();
+  try{
+    const result = await api("/integrations/woocommerce/sync", { method:"POST" });
+    UI.integrationMessage = `${fmt(result.upserted)} سفارش همگام‌سازی شد.`;
+    DB.integrationSettings = await api("/integrations/woocommerce");
+    await loadWebOrders();
+  }catch(err){
+    UI.saveError = err.message;
+  }
+  UI.integrationBusy = false;
+  render();
+}
 
 async function openBatchDetailAction(id){
   UI.openBatchId = id;

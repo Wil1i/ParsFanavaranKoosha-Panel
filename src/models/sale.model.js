@@ -25,13 +25,25 @@ const Sale = sequelize.define("Sale", {
     allowNull: false,
     field: "unit_price",
   },
+  unit: {
+    // واحد این فاکتور فروش (کیلوگرم/تن/کیسه/عدد/...)؛ در صورت خالی بودن، واحد پیش‌فرض کشت استفاده می‌شود
+    type: DataTypes.STRING(30),
+    allowNull: true,
+  },
   total: {
     type: DataTypes.FLOAT,
     allowNull: false,
   },
   customer: {
+    // نام مشتری به‌صورت اسنپ‌شات (حتی اگر بعداً مشتری حذف/ویرایش شود، در فاکتور ثابت می‌ماند)
     type: DataTypes.STRING(150),
     allowNull: true,
+  },
+  customerId: {
+    // اتصال اختیاری به رکورد مشتری در بخش «مشتریان»
+    type: DataTypes.UUID,
+    allowNull: true,
+    field: "customer_id",
   },
   note: {
     type: DataTypes.TEXT,

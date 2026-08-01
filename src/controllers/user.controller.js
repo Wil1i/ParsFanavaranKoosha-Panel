@@ -1,4 +1,5 @@
 const { User } = require("../models");
+const { logActivity } = require("../utils/activityLogger");
 
 exports.list = async (req, res, next) => {
   try {
@@ -35,6 +36,12 @@ exports.create = async (req, res, next) => {
       isAdmin: !!isAdmin,
     });
     const { password: _pw, ...safeUser } = user.toJSON();
+
+    await logActivity({
+      user: req.user, action: "USER_CREATE", entityType: "user", entityId: user.id,
+      description: `کاربر «${user.fullName}» (${user.username}) ایجاد شد.`,
+    });
+
     res.status(201).json(safeUser);
   } catch (err) {
     next(err);
@@ -54,10 +61,17 @@ exports.update = async (req, res, next) => {
     if (canAccessBatches !== undefined) user.canAccessBatches = !!canAccessBatches;
     if (canAccessWarehouse !== undefined) user.canAccessWarehouse = !!canAccessWarehouse;
     if (isAdmin !== undefined) user.isAdmin = !!isAdmin;
+    const passwordChanged = !!password;
     if (password) user.password = password; // hashed by the beforeUpdate hook
 
     await user.save();
     const { password: _pw, ...safeUser } = user.toJSON();
+
+    await logActivity({
+      user: req.user, action: "USER_UPDATE", entityType: "user", entityId: user.id,
+      description: `کاربر «${user.fullName}» (${user.username}) ویرایش شد${passwordChanged ? " (کلمه عبور نیز تغییر کرد)" : ""}.`,
+    });
+
     res.json(safeUser);
   } catch (err) {
     next(err);
@@ -74,6 +88,10 @@ exports.remove = async (req, res, next) => {
     }
 
     await user.destroy();
+    await logActivity({
+      user: req.user, action: "USER_DELETE", entityType: "user", entityId: user.id,
+      description: `کاربر «${user.fullName}» (${user.username}) حذف شد.`,
+    });
     res.status(204).send();
   } catch (err) {
     next(err);

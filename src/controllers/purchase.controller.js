@@ -1,4 +1,5 @@
 const { Purchase, Item, Batch, sequelize } = require("../models");
+const { logActivity } = require("../utils/activityLogger");
 
 async function findOrCreateItem(name, unit, t) {
   const existing = await Item.findOne({
@@ -56,6 +57,10 @@ exports.create = async (req, res, next) => {
     }, { transaction: t });
 
     await t.commit();
+    await logActivity({
+      user: req.user, action: "PURCHASE_CREATE", entityType: "purchase", entityId: purchase.id,
+      description: `فاکتور خرید «${item.name}» (${qty} ${purchase.unit}، ${purchase.total.toLocaleString("fa-IR")} تومان) برای کشت «${batch.name}» ثبت شد.`,
+    });
     res.status(201).json(purchase);
   } catch (err) {
     await t.rollback();
@@ -103,6 +108,10 @@ exports.update = async (req, res, next) => {
     await purchase.save({ transaction: t });
 
     await t.commit();
+    await logActivity({
+      user: req.user, action: "PURCHASE_UPDATE", entityType: "purchase", entityId: purchase.id,
+      description: `فاکتور خرید «${purchase.itemName}» (${purchase.total.toLocaleString("fa-IR")} تومان) ویرایش شد.`,
+    });
     res.json(purchase);
   } catch (err) {
     await t.rollback();
@@ -127,6 +136,10 @@ exports.remove = async (req, res, next) => {
     }
     await purchase.destroy({ transaction: t });
     await t.commit();
+    await logActivity({
+      user: req.user, action: "PURCHASE_DELETE", entityType: "purchase", entityId: purchase.id,
+      description: `فاکتور خرید «${purchase.itemName}» (${Number(purchase.total).toLocaleString("fa-IR")} تومان) حذف شد.`,
+    });
     res.status(204).send();
   } catch (err) {
     await t.rollback();

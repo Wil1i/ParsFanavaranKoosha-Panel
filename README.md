@@ -34,7 +34,7 @@ npm start
 - **Batch** (کشت): name, startDate, readyDays, productionQty, unit, note
 - **Item** (کالای انبار): name, unit, stock
 - **Purchase** (فاکتور خرید): batchId, itemId, itemName, date, qty, unit, unitPrice, total, supplier, note
-- **Sale** (فاکتور فروش): batchId, date, qty, unitPrice, total, customer, note
+- **Sale** (فاکتور فروش): batchId, date, qty, unit, unitPrice, total, customer, note
 
 ثبت هر فاکتور خرید به‌صورت خودکار (در یک تراکنش) موجودی کالای مرتبط در انبار را افزایش می‌دهد؛ ویرایش/حذف فاکتور هم اثر قبلی را برمی‌گرداند.
 مقدار «باقیمانده قابل فروش» هر کشت به‌صورت آنی محاسبه می‌شود: `productionQty - مجموع qty فروش‌های همان کشت`.
@@ -91,9 +91,46 @@ Authorization: Bearer <token>
 | Method | مسیر | توضیح |
 |---|---|---|
 | GET | `/api/sales?batchId=...` | لیست |
-| POST | `/api/sales` | `{ batchId, date, qty, unitPrice, customer, note }` — اگر مقدار از باقیمانده بیشتر باشد، پاسخ شامل فیلد `warning` است (بلاک نمی‌شود) |
+| POST | `/api/sales` | `{ batchId, date, qty, unit, unitPrice, customer, note }` — اگر `unit` ارسال نشود، واحد پیش‌فرض کشت استفاده می‌شود؛ اگر مقدار از باقیمانده بیشتر باشد، پاسخ شامل فیلد `warning` است (بلاک نمی‌شود) |
 | PUT | `/api/sales/:id` | ویرایش |
 | DELETE | `/api/sales/:id` | حذف |
+
+### لاگ فعالیت‌ها (فقط ادمین)
+| Method | مسیر | توضیح |
+|---|---|---|
+| GET | `/api/logs` | لیست فعالیت‌های ثبت‌شده، با صفحه‌بندی و فیلتر. کوئری‌پارامترها: `page`, `limit`, `userId`, `action`, `entityType`, `from` (YYYY-MM-DD), `to` (YYYY-MM-DD), `q` (جستجو در متن شرح) |
+
+هر عملیات نوشتن (ایجاد/ویرایش/حذف کشت، فاکتور خرید، فاکتور فروش، کالای انبار، تغییر موجودی، کاربر) و همچنین ورود موفق، به‌صورت خودکار در جدول `activity_logs` ثبت می‌شود؛ حتی اگر بعداً کاربر یا رکورد مرتبط حذف شود، نام و نام‌کاربری در لاگ به‌صورت اسنپ‌شات باقی می‌ماند.
+
+### داشبورد
+| Method | مسیر | توضیح |
+|---|---|---|
+| GET | `/api/dashboard` | گزارش جامع؛ خروجی بر اساس دسترسی کاربر واردشده فیلتر می‌شود (بخش `batches` فقط برای دارندگان دسترسی کشت‌ها، `warehouse` فقط برای دارندگان دسترسی انبار، `users` فقط برای ادمین) |
+
+### اتصال فروشگاه اینترنتی (وردپرس/ووکامرس) — فقط ادمین
+| Method | مسیر | توضیح |
+|---|---|---|
+| GET | `/api/integrations/woocommerce` | دریافت تنظیمات فعلی اتصال (کلیدها به‌صورت ماسک‌شده برگردانده می‌شوند) |
+| PUT | `/api/integrations/woocommerce` | `{ siteUrl, consumerKey, consumerSecret }` — ذخیره/به‌روزرسانی تنظیمات (برای عوض نکردن کلید، آن فیلد را خالی بفرستید) |
+| POST | `/api/integrations/woocommerce/test` | تست اتصال به REST API ووکامرس با تنظیمات ذخیره‌شده |
+| POST | `/api/integrations/woocommerce/sync` | دریافت سفارش‌های اخیر از فروشگاه و ذخیره/به‌روزرسانی آن‌ها در جدول `web_orders` |
+
+| Method | مسیر | توضیح |
+|---|---|---|
+| GET | `/api/web-orders?page=&limit=&status=&q=` | لیست سفارش‌های همگام‌سازی‌شده از سایت |
+| PATCH | `/api/web-orders/:id/assign-batch` | `{ batchId }` — اتصال یک سفارش وب به یک کشت مشخص (زیرساخت آماده؛ رابط کاربری آن قدم بعدی است) |
+
+> **پیش‌نیاز**: سایت وردپرس باید ووکامرس نصب داشته باشد و روی HTTPS باشد (چون این پیاده‌سازی از Basic Auth با Consumer Key/Secret استفاده می‌کند که ووکامرس فقط روی HTTPS آن را می‌پذیرد؛ برای سایت‌های بدون HTTPS باید OAuth 1.0a پیاده‌سازی شود که در این نسخه پشتیبانی نمی‌شود). کلید و رمز را از مسیر ووکامرس → تنظیمات → پیشرفته → REST API در وردپرس بسازید.
+
+### مشتریان
+| Method | مسیر | توضیح |
+|---|---|---|
+| GET | `/api/customers?q=جستجو` | لیست مشتریان (نام و نام خانوادگی، شماره تماس، آدرس) |
+| POST | `/api/customers` | `{ fullName, phone, address }` |
+| PUT | `/api/customers/:id` | ویرایش |
+| DELETE | `/api/customers/:id` | حذف (فاکتورهای فروش قبلی این مشتری حذف نمی‌شوند؛ فقط ارتباطشان با رکورد مشتری قطع می‌شود و نام مشتری به‌صورت اسنپ‌شات در خودِ فاکتور باقی می‌ماند) |
+
+فاکتور فروش (`POST/PUT /api/sales`) می‌تواند علاوه بر `customer` (نام آزاد)، فیلد اختیاری `customerId` هم بگیرد تا فاکتور به یک رکورد مشتری مشخص متصل شود.
 
 ### انبار کالا
 | Method | مسیر | توضیح |
