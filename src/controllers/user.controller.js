@@ -22,7 +22,7 @@ exports.getOne = async (req, res, next) => {
 
 exports.create = async (req, res, next) => {
   try {
-    const { fullName, username, password, role, canAccessBatches, canAccessWarehouse, isAdmin } = req.body;
+    const { fullName, username, password, role, canAccessBatches, canAccessWarehouse, isWarehouseManager, isAdmin } = req.body;
     if (!fullName || !username || !password) {
       return res.status(400).json({ message: "نام و نام خانوادگی، نام کاربری و کلمه عبور الزامی است." });
     }
@@ -33,6 +33,7 @@ exports.create = async (req, res, next) => {
       role: role || null,
       canAccessBatches: !!canAccessBatches,
       canAccessWarehouse: !!canAccessWarehouse,
+      isWarehouseManager: !!isWarehouseManager,
       isAdmin: !!isAdmin,
     });
     const { password: _pw, ...safeUser } = user.toJSON();
@@ -53,13 +54,14 @@ exports.update = async (req, res, next) => {
     const user = await User.findByPk(req.params.id);
     if (!user) return res.status(404).json({ message: "کاربر یافت نشد." });
 
-    const { fullName, username, password, role, canAccessBatches, canAccessWarehouse, isAdmin } = req.body;
+    const { fullName, username, password, role, canAccessBatches, canAccessWarehouse, isWarehouseManager, isAdmin } = req.body;
 
     if (fullName !== undefined) user.fullName = fullName;
     if (username !== undefined) user.username = username;
     if (role !== undefined) user.role = role;
     if (canAccessBatches !== undefined) user.canAccessBatches = !!canAccessBatches;
     if (canAccessWarehouse !== undefined) user.canAccessWarehouse = !!canAccessWarehouse;
+    if (isWarehouseManager !== undefined) user.isWarehouseManager = !!isWarehouseManager;
     if (isAdmin !== undefined) user.isAdmin = !!isAdmin;
     const passwordChanged = !!password;
     if (password) user.password = password; // hashed by the beforeUpdate hook

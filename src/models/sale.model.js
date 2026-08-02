@@ -3,8 +3,9 @@ const sequelize = require("../config/db");
 
 const Sale = sequelize.define("Sale", {
   id: {
-    type: DataTypes.UUID,
-    defaultValue: DataTypes.UUIDV4,
+    // عمداً عددی (نه UUID) است، چون همین id به‌عنوان «شماره پیگیری فاکتور فروش» به مشتری نمایش داده می‌شود
+    type: DataTypes.INTEGER,
+    autoIncrement: true,
     primaryKey: true,
   },
   batchId: {

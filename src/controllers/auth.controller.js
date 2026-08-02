@@ -12,6 +12,7 @@ function signToken(user) {
       isAdmin: user.isAdmin,
       canAccessBatches: user.canAccessBatches,
       canAccessWarehouse: user.canAccessWarehouse,
+      isWarehouseManager: user.isWarehouseManager,
     },
     process.env.JWT_SECRET,
     { expiresIn: process.env.JWT_EXPIRES_IN || "1d" }

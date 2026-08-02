@@ -30,9 +30,9 @@ npm start
 
 ## مدل داده
 
-- **User**: fullName, username, password (هش‌شده با bcrypt), role (سمت سازمانی), canAccessBatches, canAccessWarehouse, isAdmin
+- **User**: fullName, username, password (هش‌شده با bcrypt), role (سمت سازمانی), canAccessBatches, canAccessWarehouse, isWarehouseManager, isAdmin
 - **Batch** (کشت): name, startDate, readyDays, productionQty, unit, note
-- **Item** (کالای انبار): name, unit, stock
+- **Item** (کالای انبار): name, unit, stock, location, lowStockThreshold
 - **Purchase** (فاکتور خرید): batchId, itemId, itemName, date, qty, unit, unitPrice, total, supplier, note
 - **Sale** (فاکتور فروش): batchId, date, qty, unit, unitPrice, total, customer, note
 
@@ -50,7 +50,8 @@ Authorization: Bearer <token>
 سطوح دسترسی:
 - `isAdmin` → دسترسی کامل به همه‌چیز، از جمله بخش کاربران.
 - `canAccessBatches` → مسیرهای `/api/batches`, `/api/purchases`, `/api/sales`.
-- `canAccessWarehouse` → مسیرهای `/api/items`.
+- `canAccessWarehouse` → دسترسی **پایه** انبار: فقط `GET /api/items` (مشاهده) و `PATCH /api/items/:id/stock` با `delta` منفی (فقط کم کردن موجودی). تلاش برای افزایش موجودی یا فراخوانی مسیرهای ایجاد/ویرایش/حذف کالا با خطای ۴۰۳ رد می‌شود.
+- `isWarehouseManager` → دسترسی **کامل** انبار: همه‌ی مسیرهای `/api/items` شامل ایجاد، ویرایش، حذف، و افزایش/کاهش موجودی. (نیازی به `canAccessWarehouse` هم‌زمان نیست؛ `isWarehouseManager` به‌تنهایی تب انبار را هم باز می‌کند.)
 - بخش `/api/users` فقط برای `isAdmin` باز است.
 
 ## مسیرهای API
@@ -66,7 +67,7 @@ Authorization: Bearer <token>
 |---|---|---|
 | GET | `/api/users` | لیست کاربران |
 | GET | `/api/users/:id` | یک کاربر |
-| POST | `/api/users` | `{ fullName, username, password, role, canAccessBatches, canAccessWarehouse, isAdmin }` |
+| POST | `/api/users` | `{ fullName, username, password, role, canAccessBatches, canAccessWarehouse, isWarehouseManager, isAdmin }` |
 | PUT | `/api/users/:id` | ویرایش (فیلدهای اختیاری؛ برای عوض نکردن رمز، `password` را ارسال نکنید) |
 | DELETE | `/api/users/:id` | حذف کاربر |
 
@@ -130,15 +131,17 @@ Authorization: Bearer <token>
 | PUT | `/api/customers/:id` | ویرایش |
 | DELETE | `/api/customers/:id` | حذف (فاکتورهای فروش قبلی این مشتری حذف نمی‌شوند؛ فقط ارتباطشان با رکورد مشتری قطع می‌شود و نام مشتری به‌صورت اسنپ‌شات در خودِ فاکتور باقی می‌ماند) |
 
-فاکتور فروش (`POST/PUT /api/sales`) می‌تواند علاوه بر `customer` (نام آزاد)، فیلد اختیاری `customerId` هم بگیرد تا فاکتور به یک رکورد مشتری مشخص متصل شود.
+فاکتور فروش (`POST/PUT /api/sales`) می‌تواند علاوه بر `customer` (نام آزاد)، فیلد اختیاری `customerId` هم بگیرد تا فاکتور به یک رکورد مشتری مشخص متصل شود. به‌جای `customerId`، می‌توان `newCustomer: { fullName, phone, address }` فرستاد تا یک مشتری جدید به‌طور خودکار در جدول `customers` ساخته و به فاکتور متصل شود.
 
-«شماره پیگیری فاکتور» جداگانه ذخیره نمی‌شود؛ همان `id` رکورد فاکتور فروش به‌عنوان شماره پیگیری فاکتور در نظر گرفته می‌شود. برای شماره پیگیری رسید پرداخت مشتری (بانک/درگاه)، فیلد جدای `paymentTrackingNumber` وجود دارد.
+«شماره پیگیری فاکتور» جداگانه ذخیره نمی‌شود؛ همان `id` رکورد فاکتور فروش به‌عنوان شماره پیگیری فاکتور در نظر گرفته می‌شود — و به همین دلیل عمداً به‌جای UUID، یک عدد صعودی ساده (INTEGER AUTO_INCREMENT) است. برای شماره پیگیری رسید پرداخت مشتری (بانک/درگاه)، فیلد جدای `paymentTrackingNumber` وجود دارد.
+
+> **توجه**: چون نوع ستون `id` جدول `sales` از UUID به عدد صعودی تغییر کرده، اگر قبلاً این پروژه را روی یک دیتابیس موجود اجرا کرده‌اید، باید جدول `sales` (و در صورت وجود، هر جدولی که به آن ارجاع می‌داد) را از نو بسازید — `sequelize.sync({ alter: true })` نمی‌تواند این تغییر نوع را به‌طور امن روی داده‌های موجود انجام دهد.
 
 ### انبار کالا
 | Method | مسیر | توضیح |
 |---|---|---|
 | GET | `/api/items` | لیست کالاها |
-| POST | `/api/items` | `{ name, unit, stock }` |
+| POST | `/api/items` | `{ name, unit, stock, location, lowStockThreshold }` — `lowStockThreshold` اختیاری است (پیش‌فرض ۱۰)؛ هر کالا آستانه کمبود مستقل خودش را دارد و همین مقدار در محاسبه‌ی «کالاهای رو به اتمام» در داشبورد استفاده می‌شود |
 | PUT | `/api/items/:id` | ویرایش |
 | DELETE | `/api/items/:id` | حذف |
 | PATCH | `/api/items/:id/stock` | `{ delta: 1 }` یا `{ delta: -1 }` برای افزایش/کاهش دستی موجودی |

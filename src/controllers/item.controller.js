@@ -12,9 +12,12 @@ exports.list = async (req, res, next) => {
 
 exports.create = async (req, res, next) => {
   try {
-    const { name, unit, stock, location } = req.body;
+    const { name, unit, stock, location, lowStockThreshold } = req.body;
     if (!name) return res.status(400).json({ message: "نام کالا الزامی است." });
-    const item = await Item.create({ name, unit: unit || "کیلوگرم", stock: stock || 0, location: location || null });
+    const item = await Item.create({
+      name, unit: unit || "کیلوگرم", stock: stock || 0, location: location || null,
+      lowStockThreshold: lowStockThreshold !== undefined && lowStockThreshold !== "" ? Number(lowStockThreshold) : 10,
+    });
     await logActivity({
       user: req.user, action: "ITEM_CREATE", entityType: "item", entityId: item.id,
       description: `کالای انبار «${item.name}» با موجودی اولیه ${item.stock} ${item.unit} ایجاد شد.`,
@@ -30,11 +33,12 @@ exports.update = async (req, res, next) => {
     const item = await Item.findByPk(req.params.id);
     if (!item) return res.status(404).json({ message: "کالا یافت نشد." });
 
-    const { name, unit, stock, location } = req.body;
+    const { name, unit, stock, location, lowStockThreshold } = req.body;
     if (name !== undefined) item.name = name;
     if (unit !== undefined) item.unit = unit;
     if (stock !== undefined) item.stock = stock;
     if (location !== undefined) item.location = location;
+    if (lowStockThreshold !== undefined && lowStockThreshold !== "") item.lowStockThreshold = Number(lowStockThreshold);
     await item.save();
 
     await logActivity({
@@ -66,10 +70,19 @@ exports.remove = async (req, res, next) => {
 // increment/decrement stock manually, e.g. body: { delta: 1 } or { delta: -1 }
 exports.adjustStock = async (req, res, next) => {
   try {
+    const delta = Number(req.body.delta || 0);
+    const isManager = req.user.isAdmin || req.user.isWarehouseManager;
+
+    if (delta > 0 && !isManager) {
+      return res.status(403).json({ message: "فقط مدیر انبار یا مدیر سیستم می‌تواند موجودی را افزایش دهد." });
+    }
+    if (delta === 0) {
+      return res.status(400).json({ message: "مقدار تغییر موجودی نامعتبر است." });
+    }
+
     const item = await Item.findByPk(req.params.id);
     if (!item) return res.status(404).json({ message: "کالا یافت نشد." });
 
-    const delta = Number(req.body.delta || 0);
     item.stock = Math.max(0, Number(item.stock) + delta);
     await item.save();
 

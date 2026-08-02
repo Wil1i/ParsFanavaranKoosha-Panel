@@ -27,6 +27,13 @@ const Item = sequelize.define("Item", {
     type: DataTypes.STRING(150),
     allowNull: true,
   },
+  lowStockThreshold: {
+    // اگر موجودی به این عدد یا کمتر برسد، کالا «رو به اتمام» محسوب و در داشبورد نشان داده می‌شود
+    type: DataTypes.FLOAT,
+    allowNull: false,
+    defaultValue: 10,
+    field: "low_stock_threshold",
+  },
 }, {
   tableName: "items",
 });

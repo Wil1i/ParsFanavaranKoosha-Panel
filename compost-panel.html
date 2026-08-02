@@ -26,7 +26,7 @@
   ::-webkit-scrollbar-thumb{ background:#d3ccb4; border-radius:4px; }
 
   .wrap{ max-width:1080px; margin:0 auto; padding:0 16px; }
-  header.top{ background:var(--primary); color:#fff; position:relative; }
+  header.top{ background:var(--primary); color:#fff; position:relative;margin-bottom: 7px; }
   .top-inner{ display:flex; align-items:center; justify-content:space-between; padding:18px 0; gap:12px; }
   .top-inner h1{ margin:0; font-size:20px; font-weight:800; }
   .top-inner p{ margin:4px 0 0; font-size:12.5px; color:#cfe0c4; }
@@ -180,7 +180,10 @@
   .stock-out{ color:var(--danger-text); }
   .wh-actions{ display:flex; gap:6px; flex-wrap:wrap; }
   .wh-card-wrap{ background:var(--surface); border:1px solid var(--border); border-radius:18px; overflow-x:auto; -webkit-overflow-scrolling:touch; }
-  table.wh{ min-width:640px; }
+  table.wh{ min-width:700px; }
+  table.wh.batches-table{ min-width:560px; }
+  tr.clickable-row{ cursor:pointer; transition:.12s; }
+  tr.clickable-row:hover{ background:var(--soft); }
 
   .save-err{ margin-bottom:16px; font-size:13px; background:var(--danger-bg); color:var(--danger-text); border-radius:10px; padding:10px 14px; }
 
@@ -267,7 +270,7 @@
    قبل از استفاده، آدرس API_BASE را با آدرس سرور خودتان جایگزین کنید.
    ===================================================================== */
 
-const API_BASE = "http://localhost:4000/api"; // TODO: آدرس بک‌اند خودتان را اینجا بگذارید
+const API_BASE = "http://localhost:8080/api"; // TODO: آدرس بک‌اند خودتان را اینجا بگذارید
 
 const UNITS = ["کیلوگرم", "تن", "کیسه", "متر مکعب", "عدد"];
 
@@ -486,7 +489,7 @@ function accessibleTabs(){
   const tabs = [{ key:"dashboard", label:"داشبورد" }];
   if(u.isAdmin || u.canAccessBatches) tabs.push({ key:"batches", label:"کشت‌ها" });
   if(u.isAdmin || u.canAccessBatches) tabs.push({ key:"customers", label:"مشتریان" });
-  if(u.isAdmin || u.canAccessWarehouse) tabs.push({ key:"warehouse", label:"انبار کالا" });
+  if(u.isAdmin || u.canAccessWarehouse || u.isWarehouseManager) tabs.push({ key:"warehouse", label:"انبار کالا" });
   if(u.isAdmin) tabs.push({ key:"users", label:"کاربران" });
   if(u.isAdmin) tabs.push({ key:"logs", label:"لاگ فعالیت‌ها" });
   if(u.isAdmin) tabs.push({ key:"integration", label:"اتصال فروشگاه اینترنتی" });
@@ -700,17 +703,17 @@ function renderDashboardTab(){
     const b = d.batches;
     html += `
       <div class="section-head"><h2>گزارش کشت‌ها</h2></div>
-      <div class="stat-row" style="grid-template-columns:repeat(3,1fr);">
+      <div class="stat-row">
         <div class="chip"><div class="v">${fmt(b.totalBatches)}</div><div class="l">تعداد کل کشت‌ها</div></div>
         <div class="chip warn"><div class="v">${fmt(b.activeCount)}</div><div class="l">در حال آماده‌سازی</div></div>
         <div class="chip good"><div class="v">${fmt(b.readyCount)}</div><div class="l">آماده برداشت</div></div>
       </div>
-      <div class="stat-row" style="grid-template-columns:repeat(3,1fr);">
+      <div class="stat-row">
         <div class="chip"><div class="v">${fmt(b.totalProduction)}</div><div class="l">مجموع تولید</div></div>
         <div class="chip"><div class="v">${fmt(b.totalSold)}</div><div class="l">مجموع فروخته‌شده</div></div>
         <div class="chip good"><div class="v">${fmt(b.totalRemaining)}</div><div class="l">مجموع باقیمانده قابل فروش</div></div>
       </div>
-      <div class="stat-row" style="grid-template-columns:repeat(3,1fr);">
+      <div class="stat-row">
         <div class="chip"><div class="v">${fmt(b.totalPurchaseCost)}</div><div class="l">جمع خرید (تومان)</div></div>
         <div class="chip"><div class="v">${fmt(b.totalRevenue)}</div><div class="l">جمع فروش (تومان)</div></div>
         <div class="chip ${b.totalProfit >= 0 ? 'good' : 'warn'}"><div class="v">${fmt(b.totalProfit)}</div><div class="l">سود ناخالص کل (تومان)</div></div>
@@ -755,9 +758,9 @@ function renderDashboardTab(){
     const w = d.warehouse;
     html += `
       <div class="section-head" style="margin-top:28px;"><h2>گزارش انبار کالا</h2></div>
-      <div class="stat-row" style="grid-template-columns:repeat(3,1fr);">
+      <div class="stat-row">
         <div class="chip"><div class="v">${fmt(w.totalItems)}</div><div class="l">تعداد اقلام</div></div>
-        <div class="chip warn"><div class="v">${fmt(w.lowStockCount)}</div><div class="l">رو به اتمام (≤۱۰)</div></div>
+        <div class="chip warn"><div class="v">${fmt(w.lowStockCount)}</div><div class="l">رو به اتمام</div></div>
         <div class="chip"><div class="v" style="color:var(--danger-text);">${fmt(w.outOfStockCount)}</div><div class="l">ناموجود</div></div>
       </div>
       ${(w.lowStockItems.length || w.outOfStockItems.length) ? `
@@ -769,7 +772,7 @@ function renderDashboardTab(){
               <span class="name">${esc(it.name)}</span>
               <span class="stock ${toNum(it.stock) <= 0 ? 'stock-out' : 'stock-low'}">${fmt(it.stock)} ${esc(it.unit)}</span>
             </div>
-            ${it.location ? `<div class="r3">محل نگهداری: ${esc(it.location)}</div>` : ""}
+            <div class="r3">آستانه کمبود: ${fmt(it.lowStockThreshold)} ${esc(it.unit)}${it.location ? ` — محل نگهداری: ${esc(it.location)}` : ""}</div>
           </div>
         `).join("")}
       </div>` : `<div class="empty-mini" style="margin-top:8px;">همه‌ی کالاها موجودی کافی دارند.</div>`}
@@ -780,11 +783,12 @@ function renderDashboardTab(){
     const u = d.users;
     html += `
       <div class="section-head" style="margin-top:28px;"><h2>گزارش کاربران</h2></div>
-      <div class="stat-row" style="grid-template-columns:repeat(4,1fr);">
+      <div class="stat-row five">
         <div class="chip"><div class="v">${fmt(u.totalUsers)}</div><div class="l">تعداد کاربران</div></div>
         <div class="chip good"><div class="v">${fmt(u.adminCount)}</div><div class="l">مدیر سیستم</div></div>
         <div class="chip"><div class="v">${fmt(u.batchesAccessCount)}</div><div class="l">دسترسی کشت‌ها</div></div>
-        <div class="chip"><div class="v">${fmt(u.warehouseAccessCount)}</div><div class="l">دسترسی انبار</div></div>
+        <div class="chip"><div class="v">${fmt(u.warehouseAccessCount)}</div><div class="l">دسترسی انبار (کاهش موجودی)</div></div>
+        <div class="chip good"><div class="v">${fmt(u.warehouseManagerCount)}</div><div class="l">مدیر انبار</div></div>
       </div>
     `;
   }
@@ -833,31 +837,39 @@ function renderBatchesTab(){
         <p>هنوز کشتی ثبت نشده است.</p>
         <button class="btn primary" data-action="new-batch">ثبت اولین کشت</button>
       </div>` : `
-      <div class="grid-cards">
-        ${DB.batches.map(renderBatchCard).join("")}
+      <div class="wh-card-wrap">
+        <table class="wh batches-table">
+          <thead>
+            <tr>
+              <th>نام کشت</th>
+              <th>وضعیت</th>
+              <th>پیشرفت</th>
+              <th>باقیمانده قابل فروش</th>
+              <th>تولید کل</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${DB.batches.map(renderBatchTableRow).join("")}
+          </tbody>
+        </table>
       </div>`}
   `;
 }
 
-function renderBatchCard(b){
+function renderBatchTableRow(b){
   return `
-    <div class="card" data-action="open-batch" data-id="${b.id}">
-      <div class="card-top">
-        <h3>${esc(b.name)}</h3>
-        ${renderBadge(b)}
-      </div>
-      ${renderGauge(b)}
-      <div class="mini-stats">
-        <div class="mini-box">
-          <div class="l">باقیمانده قابل فروش</div>
-          <div class="v accent">${fmt(b.remaining)} ${esc(b.unit)}</div>
+    <tr class="clickable-row" data-action="open-batch" data-id="${b.id}">
+      <td style="font-weight:700;white-space:nowrap;">${esc(b.name)}</td>
+      <td>${renderBadge(b)}</td>
+      <td style="min-width:200px;">
+        <div class="gauge-track"><div class="gauge-fill" style="width:${b.progressPct}%"></div></div>
+        <div style="font-size:11px;color:var(--muted2);margin-top:4px;white-space:nowrap;">
+          ${b.isReady ? `آماده — ${fmt(Math.abs(b.daysRemaining))} روز پیش` : `${fmt(b.daysRemaining)} روز مانده (روز ${fmt(b.daysElapsed)} از ${fmt(b.readyDays)})`}
         </div>
-        <div class="mini-box">
-          <div class="l">تولید کل</div>
-          <div class="v">${fmt(b.productionQty)} ${esc(b.unit)}</div>
-        </div>
-      </div>
-    </div>
+      </td>
+      <td style="font-weight:800;color:var(--primary);white-space:nowrap;">${fmt(b.remaining)} ${esc(b.unit)}</td>
+      <td style="color:var(--muted);white-space:nowrap;">${fmt(b.productionQty)} ${esc(b.unit)}</td>
+    </tr>
   `;
 }
 
@@ -953,38 +965,46 @@ function renderBatchDetail(){
 
 /* ===================== warehouse ===================== */
 
+function isWarehouseManager(){
+  return !!(AUTH.user && (AUTH.user.isAdmin || AUTH.user.isWarehouseManager));
+}
+
 function renderWarehouseTab(){
-  const lowStock = DB.items.filter(it => toNum(it.stock) <= 10).length;
+  const lowStock = DB.items.filter(it => toNum(it.stock) > 0 && toNum(it.stock) <= toNum(it.lowStockThreshold)).length;
+  const canManage = isWarehouseManager();
   return `
     <div class="stat-row two">
       <div class="chip"><div class="v">${fmt(DB.items.length)}</div><div class="l">تعداد اقلام انبار</div></div>
-      <div class="chip warn"><div class="v">${fmt(lowStock)}</div><div class="l">اقلام رو به اتمام (≤۱۰)</div></div>
+      <div class="chip warn"><div class="v">${fmt(lowStock)}</div><div class="l">اقلام رو به اتمام</div></div>
     </div>
     <div class="section-head">
       <h2>موجودی کالاهای انبار</h2>
-      <button class="btn primary" data-action="new-item">+ کالای جدید</button>
+      ${canManage ? `<button class="btn primary" data-action="new-item">+ کالای جدید</button>` : ""}
     </div>
     ${DB.items.length === 0 ? `
       <div class="empty">
         <p>هنوز کالایی در انبار ثبت نشده است.</p>
-        <button class="btn primary" data-action="new-item">افزودن کالا</button>
+        ${canManage ? `<button class="btn primary" data-action="new-item">افزودن کالا</button>` : ""}
       </div>` : `
       <div class="wh-card-wrap">
         <table class="wh">
-          <thead><tr><th>نام کالا</th><th>واحد</th><th>موجودی</th><th>محل نگهداری</th><th>عملیات</th></tr></thead>
+          <thead><tr><th>نام کالا</th><th>واحد</th><th>موجودی</th><th>آستانه کمبود</th><th>محل نگهداری</th><th>عملیات</th></tr></thead>
           <tbody>
             ${DB.items.map(it => `
               <tr>
                 <td>${esc(it.name)}</td>
                 <td style="color:var(--muted)">${esc(it.unit)}</td>
-                <td><span class="stock ${toNum(it.stock) <= 0 ? 'stock-out' : (toNum(it.stock) <= 10 ? 'stock-low' : 'stock-ok')}">${fmt(it.stock)}</span></td>
+                <td><span class="stock ${toNum(it.stock) <= 0 ? 'stock-out' : (toNum(it.stock) <= toNum(it.lowStockThreshold) ? 'stock-low' : 'stock-ok')}">${fmt(it.stock)}</span></td>
+                <td style="color:var(--muted)">${fmt(it.lowStockThreshold)} ${esc(it.unit)}</td>
                 <td style="color:var(--muted)">${it.location ? esc(it.location) : '<span style="color:var(--muted2)">—</span>'}</td>
                 <td>
                   <div class="wh-actions">
-                    <button class="btn small secondary" data-action="stock-up" data-id="${it.id}">+۱</button>
+                    ${canManage ? `<button class="btn small secondary" data-action="stock-up" data-id="${it.id}">+۱</button>` : ""}
                     <button class="btn small secondary" data-action="stock-down" data-id="${it.id}">−۱</button>
-                    <button class="btn small ghost" data-action="edit-item" data-id="${it.id}">ویرایش</button>
-                    <button class="btn small danger" data-action="delete-item" data-id="${it.id}">حذف</button>
+                    ${canManage ? `
+                      <button class="btn small ghost" data-action="edit-item" data-id="${it.id}">ویرایش</button>
+                      <button class="btn small danger" data-action="delete-item" data-id="${it.id}">حذف</button>
+                    ` : ""}
                   </div>
                 </td>
               </tr>
@@ -1041,7 +1061,8 @@ function accessLabel(u){
   const parts = [];
   if(u.isAdmin){ parts.push("مدیر سیستم"); return parts; }
   if(u.canAccessBatches) parts.push("کشت‌ها");
-  if(u.canAccessWarehouse) parts.push("انبار کالا");
+  if(u.isWarehouseManager) parts.push("مدیر انبار");
+  else if(u.canAccessWarehouse) parts.push("انبار کالا (فقط کاهش موجودی)");
   return parts;
 }
 
@@ -1487,7 +1508,12 @@ async function openSaleModal(batchId, sale){
         ${DB.customers.map(c => `<option value="${c.id}" ${matchedCustomer && matchedCustomer.id===c.id ? 'selected':''}>${esc(c.fullName)}${c.phone ? ' — ' + esc(c.phone) : ''}</option>`).join("")}
         <option value="__custom__" ${isCustomCustomer ? 'selected':''}>نام دیگر (تایپ دستی)</option>
       </select>
-      <input class="inp" id="f-customer-custom" style="margin-top:8px;${isCustomCustomer ? '' : 'display:none;'}" value="${esc(isCustomCustomer ? s.customer : '')}" placeholder="نام مشتری" />
+      <input class="inp" id="f-customer-custom" style="margin-top:8px;${isCustomCustomer ? '' : 'display:none;'}" value="${esc(isCustomCustomer ? s.customer : '')}" placeholder="نام و نام خانوادگی مشتری" />
+      <div id="f-customer-custom-extra" class="row2" style="margin-top:8px;${isCustomCustomer ? '' : 'display:none;'}">
+        <input class="inp" id="f-customer-custom-phone" value="" placeholder="شماره تماس (اختیاری)" />
+        <input class="inp" id="f-customer-custom-address" value="" placeholder="آدرس (اختیاری)" />
+      </div>
+      <span class="hint">با تایپ نام جدید، این فرد به‌طور خودکار به لیست «مشتریان» هم اضافه می‌شود.</span>
       ${DB.customers.length === 0 ? `<span class="hint">هنوز مشتری‌ای در بخش «مشتریان» ثبت نشده؛ می‌توانید همین‌جا نام آزاد تایپ کنید.</span>` : ""}
     </label>
     <label class="field"><span class="lbl">توضیحات (اختیاری)</span><textarea class="inp" id="f-note" rows="2">${esc(s.note)}</textarea></label>
@@ -1506,7 +1532,9 @@ async function openSaleModal(batchId, sale){
   document.getElementById("f-unitPrice").addEventListener("input", upd);
   document.getElementById("f-paidAmount").addEventListener("input", upd);
   document.getElementById("f-customerId").addEventListener("change", (e) => {
-    document.getElementById("f-customer-custom").style.display = e.target.value === "__custom__" ? "" : "none";
+    const show = e.target.value === "__custom__";
+    document.getElementById("f-customer-custom").style.display = show ? "" : "none";
+    document.getElementById("f-customer-custom-extra").style.display = show ? "" : "none";
   });
   wireJalaliDateField("f-date");
 }
@@ -1517,9 +1545,16 @@ async function saveSaleFromModal(id, batchId){
   if(!qty || !unitPrice){ modalErr("مقدار و قیمت واحد الزامی است."); document.getElementById("modal-err").style.display="block"; return; }
 
   const customerSel = document.getElementById("f-customerId").value;
-  let customerId = "", customerName = "";
+  let customerId = "", customerName = "", newCustomer = null;
   if(customerSel === "__custom__"){
     customerName = document.getElementById("f-customer-custom").value.trim();
+    if(customerName){
+      newCustomer = {
+        fullName: customerName,
+        phone: document.getElementById("f-customer-custom-phone").value.trim(),
+        address: document.getElementById("f-customer-custom-address").value.trim(),
+      };
+    }
   }else if(customerSel){
     customerId = customerSel;
     const c = DB.customers.find(x => x.id === customerSel);
@@ -1533,6 +1568,7 @@ async function saveSaleFromModal(id, batchId){
     paymentTrackingNumber: document.getElementById("f-paymentTrackingNumber").value.trim(),
     customer: customerName,
     customerId: customerId || null,
+    newCustomer,
     note: document.getElementById("f-note").value.trim(),
   };
   try{
@@ -1558,7 +1594,7 @@ async function deleteSale(id, batchId){
 
 function openItemModal(item){
   const editing = !!item;
-  const it = item || { name:"", unit:"کیلوگرم", stock:0, location:"" };
+  const it = item || { name:"", unit:"کیلوگرم", stock:0, location:"", lowStockThreshold:10 };
   modalShell(editing ? "ویرایش کالا" : "کالای جدید", `
     <div id="modal-err" class="login-err" style="display:none;"></div>
     <label class="field"><span class="lbl">نام کالا</span><input class="inp" id="f-name" value="${esc(it.name)}" /></label>
@@ -1568,6 +1604,10 @@ function openItemModal(item){
       </label>
       <label class="field"><span class="lbl">موجودی</span><input type="number" min="0" class="inp" id="f-stock" value="${esc(it.stock)}" /></label>
     </div>
+    <label class="field"><span class="lbl">آستانه کمبود (کمبود)</span>
+      <input type="number" min="0" class="inp" id="f-lowStockThreshold" value="${esc(it.lowStockThreshold ?? 10)}" />
+      <span class="hint">اگر موجودی به این عدد یا کمتر برسد، این کالا به‌عنوان «رو به اتمام» در انبار و داشبورد نشان داده می‌شود.</span>
+    </label>
     <label class="field"><span class="lbl">محل نگهداری (اختیاری)</span>
       <input class="inp" id="f-location" value="${esc(it.location)}" placeholder="مثلاً سالن ۱ - قفسه ۳" />
     </label>
@@ -1585,6 +1625,7 @@ async function saveItemFromModal(id){
     name,
     unit: document.getElementById("f-unit").value,
     stock: toNum(document.getElementById("f-stock").value),
+    lowStockThreshold: toNum(document.getElementById("f-lowStockThreshold").value),
     location: document.getElementById("f-location").value.trim(),
   };
   try{
@@ -1662,7 +1703,7 @@ async function deleteCustomer(id){
 
 function openUserModal(user){
   const editing = !!user;
-  const u = user || { fullName:"", username:"", password:"", role:"", canAccessBatches:true, canAccessWarehouse:false, isAdmin:false };
+  const u = user || { fullName:"", username:"", password:"", role:"", canAccessBatches:true, canAccessWarehouse:false, isWarehouseManager:false, isAdmin:false };
   modalShell(editing ? "ویرایش کاربر" : "کاربر جدید", `
     <div id="modal-err" class="login-err" style="display:none;"></div>
     <label class="field"><span class="lbl">نام و نام خانوادگی</span>
@@ -1686,7 +1727,10 @@ function openUserModal(user){
           <input type="checkbox" id="f-access-batches" ${u.canAccessBatches ? 'checked' : ''} /> کشت‌ها
         </label>
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;">
-          <input type="checkbox" id="f-access-warehouse" ${u.canAccessWarehouse ? 'checked' : ''} /> انبار کالا
+          <input type="checkbox" id="f-access-warehouse" ${u.canAccessWarehouse ? 'checked' : ''} /> انبار کالا (فقط مشاهده و کم کردن موجودی)
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;">
+          <input type="checkbox" id="f-warehouse-manager" ${u.isWarehouseManager ? 'checked' : ''} /> مدیر انبار (افزودن/ویرایش/حذف کالا و افزایش موجودی)
         </label>
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;">
           <input type="checkbox" id="f-access-admin" ${u.isAdmin ? 'checked' : ''} /> مدیر سیستم (دسترسی کامل + مدیریت کاربران)
@@ -1715,6 +1759,7 @@ async function saveUserFromModal(id){
     role: document.getElementById("f-role").value.trim(),
     canAccessBatches: document.getElementById("f-access-batches").checked,
     canAccessWarehouse: document.getElementById("f-access-warehouse").checked,
+    isWarehouseManager: document.getElementById("f-warehouse-manager").checked,
     isAdmin: document.getElementById("f-access-admin").checked,
   };
   if(password) payload.password = password;

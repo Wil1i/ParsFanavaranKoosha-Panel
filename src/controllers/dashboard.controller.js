@@ -76,9 +76,9 @@ exports.summary = async (req, res, next) => {
       };
     }
 
-    if (req.user.isAdmin || req.user.canAccessWarehouse) {
+    if (req.user.isAdmin || req.user.canAccessWarehouse || req.user.isWarehouseManager) {
       const items = await Item.findAll({ order: [["name", "ASC"]] });
-      const lowStock = items.filter((it) => Number(it.stock) > 0 && Number(it.stock) <= 10);
+      const lowStock = items.filter((it) => Number(it.stock) > 0 && Number(it.stock) <= Number(it.lowStockThreshold));
       const outOfStock = items.filter((it) => Number(it.stock) <= 0);
 
       out.warehouse = {
@@ -97,6 +97,7 @@ exports.summary = async (req, res, next) => {
         adminCount: users.filter((u) => u.isAdmin).length,
         batchesAccessCount: users.filter((u) => u.canAccessBatches).length,
         warehouseAccessCount: users.filter((u) => u.canAccessWarehouse).length,
+        warehouseManagerCount: users.filter((u) => u.isWarehouseManager).length,
       };
     }
 

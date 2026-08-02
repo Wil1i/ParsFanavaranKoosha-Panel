@@ -1,3 +1,5 @@
+require("dotenv").config()
+
 const send = (code, phone, args) => {
 
 const https = require('https');

@@ -35,10 +35,18 @@ const User = sequelize.define("User", {
     field: "can_access_batches",
   },
   canAccessWarehouse: {
+    // دسترسی پایه انبار: فقط مشاهده لیست و کم کردن موجودی
     type: DataTypes.BOOLEAN,
     allowNull: false,
     defaultValue: false,
     field: "can_access_warehouse",
+  },
+  isWarehouseManager: {
+    // دسترسی کامل انبار: افزودن/ویرایش/حذف کالا و افزایش/کاهش موجودی
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: false,
+    field: "is_warehouse_manager",
   },
   isAdmin: {
     type: DataTypes.BOOLEAN,
