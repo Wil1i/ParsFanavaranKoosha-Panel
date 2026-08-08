@@ -937,7 +937,10 @@ function renderBatchDetail(){
             <h3>فاکتورهای فروش</h3>
             <div class="sum">جمع: ${fmt(b.revenue)} تومان</div>
           </div>
-          <button class="btn small primary" data-action="new-sale" data-batch-id="${b.id}">+ فاکتور فروش</button>
+          <div class="wh-actions">
+            <button class="btn small secondary" data-action="export-sales-excel" data-batch-id="${b.id}" data-batch-name="${esc(b.name)}">📥 اکسل فاکتورهای فروش</button>
+            <button class="btn small primary" data-action="new-sale" data-batch-id="${b.id}">+ فاکتور فروش</button>
+          </div>
         </div>
         ${(!b.sales || b.sales.length === 0) ? `<div class="empty-mini">فاکتور فروشی ثبت نشده است.</div>` :
           b.sales.slice().sort((a,x)=> a.date < x.date ? 1 : -1).map(s => {
@@ -1043,6 +1046,7 @@ function renderCustomersTab(){
                 <td style="color:var(--muted);max-width:280px;">${c.address ? esc(c.address) : '<span style="color:var(--muted2)">—</span>'}</td>
                 <td>
                   <div class="wh-actions">
+                    <button class="btn small secondary" data-action="view-customer-invoices" data-id="${c.id}">فاکتورها</button>
                     <button class="btn small ghost" data-action="edit-customer" data-id="${c.id}">ویرایش</button>
                     <button class="btn small danger" data-action="delete-customer" data-id="${c.id}">حذف</button>
                   </div>
@@ -1326,10 +1330,10 @@ function renderIntegrationTab(){
 
 function closeModal(){ document.getElementById("modal-root").innerHTML = ""; }
 
-function modalShell(title, bodyHtml){
+function modalShell(title, bodyHtml, wide){
   document.getElementById("modal-root").innerHTML = `
     <div class="overlay" id="overlay">
-      <div class="modal">
+      <div class="modal ${wide ? 'wide' : ''}">
         <div class="modal-head">
           <h3>${esc(title)}</h3>
           <button class="modal-close" data-action="close-modal">×</button>
@@ -1403,6 +1407,44 @@ async function deleteBatch(id){
     if(UI.openBatchId === id){ UI.openBatchId = null; UI.batchDetail = null; }
     await loadBatches();
   }catch(err){ UI.saveError = err.message; render(); }
+}
+
+async function downloadBatchSalesExcel(batchId, batchName){
+  UI.saveError = "";
+  try{
+    const res = await fetch(API_BASE + "/batches/" + batchId + "/export-sales", {
+      headers: AUTH.token ? { Authorization: "Bearer " + AUTH.token } : {},
+    });
+
+    if(res.status === 401){
+      AUTH.token = null; AUTH.user = null;
+      clearAuthStorage();
+      UI.loginError = "نشست شما منقضی شده یا نامعتبر است. دوباره وارد شوید.";
+      render();
+      return;
+    }
+
+    if(!res.ok){
+      let msg = "دریافت فایل اکسل با خطا مواجه شد.";
+      try{ const data = await res.json(); if(data && data.message) msg = data.message; }catch(e){}
+      UI.saveError = msg;
+      render();
+      return;
+    }
+
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `فاکتورهای-فروش-${batchName}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 3000);
+  }catch(err){
+    UI.saveError = "اتصال به سرور برقرار نشد.";
+    render();
+  }
 }
 
 /* ---- purchase modal ---- */
@@ -1699,6 +1741,51 @@ async function deleteCustomer(id){
   catch(err){ UI.saveError = err.message; render(); }
 }
 
+async function openCustomerInvoicesModal(id){
+  modalShell("فاکتورهای مشتری", `<div class="empty" style="padding:30px 0;"><p><span class="spin"></span> در حال بارگذاری…</p></div>`, true);
+  try{
+    const data = await api("/customers/" + id + "/invoices");
+    const totalSales = data.sales.reduce((s,x) => s + toNum(x.total), 0);
+    const totalPurchases = data.purchases.reduce((s,x) => s + toNum(x.total), 0);
+
+    modalShell(`فاکتورهای «${data.customer.fullName}»`, `
+      <div class="stat-row two" style="margin-bottom:16px;">
+        <div class="chip good"><div class="v">${fmt(totalSales)}</div><div class="l">جمع فاکتورهای فروش (تومان)</div></div>
+        <div class="chip"><div class="v">${fmt(totalPurchases)}</div><div class="l">جمع فاکتورهای خرید (تومان)</div></div>
+      </div>
+
+      <h3 style="font-size:14.5px;margin:0 0 10px;">فاکتورهای فروش</h3>
+      ${data.sales.length === 0 ? `<div class="empty-mini">فاکتور فروشی برای این مشتری ثبت نشده است.</div>` :
+        data.sales.map(s => {
+          const due = toNum(s.total) - toNum(s.paidAmount);
+          return `
+          <div class="invoice-row">
+            <div class="r1"><span class="name">کشت: ${esc(s.batch ? s.batch.name : "—")}</span><span class="date">${fmtDate(s.date)}</span></div>
+            <div class="r2"><span>${fmt(s.qty)} ${esc(s.unit || "")} × ${fmt(s.unitPrice)} تومان</span><span class="tot">${fmt(s.total)} تومان</span></div>
+            <div class="r2"><span>پرداخت‌شده: ${fmt(s.paidAmount)} تومان</span><span style="font-weight:800;color:${due>0?'var(--danger-text)':'var(--primary)'};">مانده: ${fmt(due)} تومان</span></div>
+            <div class="r3">شماره پیگیری فاکتور: <span style="font-family:monospace;">${esc(s.id)}</span></div>
+          </div>
+        `;}).join("")}
+
+      <h3 style="font-size:14.5px;margin:20px 0 10px;">فاکتورهای خرید (بر اساس تطبیق نام تامین‌کننده)</h3>
+      ${data.purchases.length === 0 ? `<div class="empty-mini">فاکتور خریدی با این نام به‌عنوان تامین‌کننده ثبت نشده است.</div>` :
+        data.purchases.map(p => `
+          <div class="invoice-row">
+            <div class="r1"><span class="name">${esc(p.itemName)} — کشت: ${esc(p.batch ? p.batch.name : "—")}</span><span class="date">${fmtDate(p.date)}</span></div>
+            <div class="r2"><span>${fmt(p.qty)} ${esc(p.unit)} × ${fmt(p.unitPrice)} تومان</span><span class="tot">${fmt(p.total)} تومان</span></div>
+          </div>
+        `).join("")}
+
+      <div class="modal-actions" style="margin-top:16px;">
+        <button class="btn secondary full" data-action="close-modal">بستن</button>
+      </div>
+    `, true);
+  }catch(err){
+    modalShell("خطا", `<div class="login-err">${esc(err.message)}</div>
+      <div class="modal-actions"><button class="btn secondary full" data-action="close-modal">بستن</button></div>`);
+  }
+}
+
 /* ---- user modal ---- */
 
 function openUserModal(user){
@@ -1814,6 +1901,7 @@ document.addEventListener("click", async (e) => {
     case "save-purchase": await savePurchaseFromModal(id || null, batchId); break;
 
     case "new-sale": openSaleModal(batchId, null); break;
+    case "export-sales-excel": await downloadBatchSalesExcel(batchId, el.dataset.batchName || "کشت"); break;
     case "edit-sale": openSaleModal(UI.openBatchId, (UI.batchDetail.sales || []).find(s => s.id === id)); break;
     case "delete-sale": await deleteSale(id, batchId); break;
     case "save-sale": await saveSaleFromModal(id || null, batchId); break;
@@ -1821,6 +1909,7 @@ document.addEventListener("click", async (e) => {
     case "new-customer": openCustomerModal(null); break;
     case "edit-customer": openCustomerModal(DB.customers.find(c => c.id === id)); break;
     case "delete-customer": await deleteCustomer(id); break;
+    case "view-customer-invoices": await openCustomerInvoicesModal(id); break;
     case "save-customer": await saveCustomerFromModal(id || null); break;
 
     case "new-item": openItemModal(null); break;

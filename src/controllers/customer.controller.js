@@ -1,5 +1,5 @@
 const { Op } = require("sequelize");
-const { Customer } = require("../models");
+const { Customer, Sale, Purchase, Batch, sequelize } = require("../models");
 const { logActivity } = require("../utils/activityLogger");
 
 exports.list = async (req, res, next) => {
@@ -73,6 +73,38 @@ exports.remove = async (req, res, next) => {
     });
 
     res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * همه‌ی فاکتورهای فروش و خرید مرتبط با این مشتری.
+ * فاکتورهای فروش از طریق customerId (اتصال رسمی) پیدا می‌شوند.
+ * فاکتورهای خرید اتصال رسمی به مشتری ندارند (فیلد «تامین‌کننده» فقط متنی است)؛
+ * اگر همین شخص به‌عنوان تامین‌کننده هم در فاکتورهای خرید ثبت شده باشد (تطبیق نام)، اینجا نشان داده می‌شود.
+ */
+exports.invoices = async (req, res, next) => {
+  try {
+    const customer = await Customer.findByPk(req.params.id);
+    if (!customer) return res.status(404).json({ message: "مشتری یافت نشد." });
+
+    const sales = await Sale.findAll({
+      where: { customerId: customer.id },
+      order: [["date", "DESC"]],
+      include: [{ model: Batch, as: "batch", attributes: ["id", "name"] }],
+    });
+
+    const purchases = await Purchase.findAll({
+      where: sequelize.where(
+        sequelize.fn("LOWER", sequelize.col("supplier")),
+        customer.fullName.trim().toLowerCase()
+      ),
+      order: [["date", "DESC"]],
+      include: [{ model: Batch, as: "batch", attributes: ["id", "name"] }],
+    });
+
+    res.json({ customer, sales, purchases });
   } catch (err) {
     next(err);
   }

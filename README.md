@@ -79,6 +79,7 @@ Authorization: Bearer <token>
 | POST | `/api/batches` | `{ name, startDate, readyDays, productionQty, unit, note }` |
 | PUT | `/api/batches/:id` | ویرایش |
 | DELETE | `/api/batches/:id` | حذف کشت (فاکتورهای مرتبط هم حذف می‌شوند) |
+| GET | `/api/batches/:id/export-sales` | خروجی فایل اکسل (.xlsx) از تمام فاکتورهای فروش این کشت؛ سربرگ فایل نام کشت را نشان می‌دهد. پاسخ باینری است (نه JSON) — از fetch با هدر Authorization و دانلود Blob استفاده کنید |
 
 ### فاکتور خرید
 | Method | مسیر | توضیح |
@@ -127,6 +128,7 @@ Authorization: Bearer <token>
 | Method | مسیر | توضیح |
 |---|---|---|
 | GET | `/api/customers?q=جستجو` | لیست مشتریان (نام و نام خانوادگی، شماره تماس، آدرس) |
+| GET | `/api/customers/:id/invoices` | همه‌ی فاکتورهای فروش این مشتری (از طریق `customerId`)، به‌علاوه فاکتورهای خریدی که همین نام در فیلد «تامین‌کننده» آن‌ها ثبت شده (تطبیق نام، چون فاکتور خرید اتصال رسمی به مشتری ندارد) |
 | POST | `/api/customers` | `{ fullName, phone, address }` |
 | PUT | `/api/customers/:id` | ویرایش |
 | DELETE | `/api/customers/:id` | حذف (فاکتورهای فروش قبلی این مشتری حذف نمی‌شوند؛ فقط ارتباطشان با رکورد مشتری قطع می‌شود و نام مشتری به‌صورت اسنپ‌شات در خودِ فاکتور باقی می‌ماند) |
