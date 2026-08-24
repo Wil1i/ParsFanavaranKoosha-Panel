@@ -1,5 +1,5 @@
 const ExcelJS = require("exceljs");
-const { Batch, Purchase, Sale, sequelize } = require("../models");
+const { Batch, Purchase, Sale, Payment, sequelize } = require("../models");
 const { batchMeta } = require("../utils/batchMeta");
 const { logActivity } = require("../utils/activityLogger");
 
@@ -45,7 +45,7 @@ exports.getOne = async (req, res, next) => {
     const batch = await Batch.findByPk(req.params.id, {
       include: [
         { model: Purchase, as: "purchases", order: [["date", "DESC"]] },
-        { model: Sale, as: "sales", order: [["date", "DESC"]] },
+        { model: Sale, as: "sales", order: [["date", "DESC"]], include: [{ model: Payment, as: "payments" }] },
       ],
     });
     if (!batch) return res.status(404).json({ message: "کشت یافت نشد." });
@@ -140,6 +140,7 @@ exports.exportSalesExcel = async (req, res, next) => {
     const sales = await Sale.findAll({
       where: { batchId: batch.id },
       order: [["date", "ASC"]],
+      include: [{ model: Payment, as: "payments" }],
     });
 
     const workbook = new ExcelJS.Workbook();
@@ -150,7 +151,7 @@ exports.exportSalesExcel = async (req, res, next) => {
       views: [{ rightToLeft: true }],
     });
 
-    const COLS = 10;
+    const COLS = 12;
 
     // --- سربرگ: مشخص می‌کند این گزارش مربوط به کدام کشت است ---
     sheet.mergeCells(1, 1, 1, COLS);
@@ -171,8 +172,8 @@ exports.exportSalesExcel = async (req, res, next) => {
 
     // --- سربرگ ستون‌ها ---
     const headerRow = sheet.addRow([
-      "شماره فاکتور", "تاریخ", "مشتری", "مقدار", "واحد",
-      "قیمت واحد (تومان)", "مبلغ کل (تومان)", "پرداخت‌شده (تومان)", "مانده (تومان)", "شماره پیگیری پرداخت",
+      "شماره فاکتور", "تاریخ", "مشتری", "مقدار", "واحد", "تعداد بلوک", "میانگین وزن هر بلوک",
+      "قیمت واحد (تومان)", "مبلغ کل (تومان)", "پرداخت‌شده (تومان)", "مانده (تومان)", "روش‌های پرداخت",
     ]);
     headerRow.eachCell((cell) => {
       cell.font = { bold: true, color: { argb: "FF2B2822" } };
@@ -189,29 +190,37 @@ exports.exportSalesExcel = async (req, res, next) => {
       totalAmount += Number(s.total);
       totalPaid += Number(s.paidAmount);
 
+      const methodsText = (s.payments || [])
+        .map((p) => `${p.method}: ${Number(p.amount).toLocaleString("fa-IR")}${p.trackingNumber ? ` (پیگیری: ${p.trackingNumber})` : ""}`)
+        .join(" | ");
+
+      const avgWeightPerBlock = s.blockCount ? Number(s.qty) / Number(s.blockCount) : null;
+
       const row = sheet.addRow([
         s.id,
         s.date,
         s.customer || "—",
         Number(s.qty),
         s.unit || batch.unit,
+        s.blockCount || "—",
+        avgWeightPerBlock !== null ? Number(avgWeightPerBlock.toFixed(3)) : "—",
         Number(s.unitPrice),
         Number(s.total),
         Number(s.paidAmount),
         due,
-        s.paymentTrackingNumber || "",
+        methodsText || "—",
       ]);
       row.eachCell((cell) => { cell.alignment = { horizontal: "center" }; });
     });
 
     if (sales.length === 0) {
-      const emptyRow = sheet.addRow(["", "", "هنوز فاکتور فروشی برای این کشت ثبت نشده است.", "", "", "", "", "", "", ""]);
+      const emptyRow = sheet.addRow(["", "", "هنوز فاکتور فروشی برای این کشت ثبت نشده است.", "", "", "", "", "", "", "", "", ""]);
       sheet.mergeCells(emptyRow.number, 1, emptyRow.number, COLS);
       emptyRow.getCell(1).alignment = { horizontal: "center" };
       emptyRow.getCell(1).font = { italic: true, color: { argb: "FF9A917C" } };
     } else {
       const totalRow = sheet.addRow([
-        "", "", "جمع کل", totalQty, "", "", totalAmount, totalPaid, totalAmount - totalPaid, "",
+        "", "", "جمع کل", totalQty, "", "", "", "", totalAmount, totalPaid, totalAmount - totalPaid, "",
       ]);
       totalRow.eachCell((cell) => {
         cell.font = { bold: true };
@@ -221,8 +230,8 @@ exports.exportSalesExcel = async (req, res, next) => {
     }
 
     sheet.columns = [
-      { width: 14 }, { width: 14 }, { width: 24 }, { width: 12 }, { width: 12 },
-      { width: 16 }, { width: 16 }, { width: 16 }, { width: 16 }, { width: 22 },
+      { width: 14 }, { width: 14 }, { width: 24 }, { width: 12 }, { width: 12 }, { width: 12 }, { width: 18 },
+      { width: 16 }, { width: 16 }, { width: 16 }, { width: 16 }, { width: 34 },
     ];
 
     const safeName = `sales-${batch.id}`;

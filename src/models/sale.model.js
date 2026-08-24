@@ -31,6 +31,12 @@ const Sale = sequelize.define("Sale", {
     type: DataTypes.STRING(30),
     allowNull: true,
   },
+  blockCount: {
+    // تعداد بلوک کمپوست در این فاکتور؛ برای محاسبه‌ی میانگین وزن هر بلوک (qty / blockCount) استفاده می‌شود
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    field: "block_count",
+  },
   total: {
     type: DataTypes.FLOAT,
     allowNull: false,

@@ -16,6 +16,12 @@ const Customer = sequelize.define("Customer", {
     type: DataTypes.STRING(30),
     allowNull: true,
   },
+  nationalId: {
+    // کد ملی مشتری
+    type: DataTypes.STRING(20),
+    allowNull: true,
+    field: "national_id",
+  },
   address: {
     type: DataTypes.TEXT,
     allowNull: true,

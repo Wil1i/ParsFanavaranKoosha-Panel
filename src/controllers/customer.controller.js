@@ -1,5 +1,5 @@
 const { Op } = require("sequelize");
-const { Customer, Sale, Purchase, Batch, sequelize } = require("../models");
+const { Customer, Sale, Purchase, Batch, Payment, sequelize } = require("../models");
 const { logActivity } = require("../utils/activityLogger");
 
 exports.list = async (req, res, next) => {
@@ -9,6 +9,7 @@ exports.list = async (req, res, next) => {
       where[Op.or] = [
         { fullName: { [Op.like]: `%${req.query.q}%` } },
         { phone: { [Op.like]: `%${req.query.q}%` } },
+        { nationalId: { [Op.like]: `%${req.query.q}%` } },
       ];
     }
     const customers = await Customer.findAll({ where, order: [["fullName", "ASC"]] });
@@ -20,11 +21,11 @@ exports.list = async (req, res, next) => {
 
 exports.create = async (req, res, next) => {
   try {
-    const { fullName, phone, address } = req.body;
+    const { fullName, phone, nationalId, address } = req.body;
     if (!fullName) return res.status(400).json({ message: "نام و نام خانوادگی مشتری الزامی است." });
 
     const customer = await Customer.create({
-      fullName, phone: phone || null, address: address || null,
+      fullName, phone: phone || null, nationalId: nationalId || null, address: address || null,
     });
 
     await logActivity({
@@ -43,9 +44,10 @@ exports.update = async (req, res, next) => {
     const customer = await Customer.findByPk(req.params.id);
     if (!customer) return res.status(404).json({ message: "مشتری یافت نشد." });
 
-    const { fullName, phone, address } = req.body;
+    const { fullName, phone, nationalId, address } = req.body;
     if (fullName !== undefined) customer.fullName = fullName;
     if (phone !== undefined) customer.phone = phone;
+    if (nationalId !== undefined) customer.nationalId = nationalId;
     if (address !== undefined) customer.address = address;
     await customer.save();
 
@@ -92,7 +94,10 @@ exports.invoices = async (req, res, next) => {
     const sales = await Sale.findAll({
       where: { customerId: customer.id },
       order: [["date", "DESC"]],
-      include: [{ model: Batch, as: "batch", attributes: ["id", "name"] }],
+      include: [
+        { model: Batch, as: "batch", attributes: ["id", "name"] },
+        { model: Payment, as: "payments" },
+      ],
     });
 
     const purchases = await Purchase.findAll({

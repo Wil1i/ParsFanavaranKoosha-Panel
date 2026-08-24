@@ -273,6 +273,7 @@
 const API_BASE = "http://localhost:8080/api"; // TODO: آدرس بک‌اند خودتان را اینجا بگذارید
 
 const UNITS = ["کیلوگرم", "تن", "کیسه", "متر مکعب", "عدد"];
+const PAYMENT_METHODS = ["نقدی", "کارت به کارت", "انتقال بانکی (شبا)", "چک", "سایر"];
 
 let AUTH = { token: null, user: null };
 
@@ -307,6 +308,7 @@ let UI = {
   webOrderFilters: { status:"", q:"", page:1, limit:30 },
   integrationBusy: false,
   integrationMessage: "",
+  customerSearch: "",
 };
 
 /* ===================== helpers ===================== */
@@ -492,7 +494,7 @@ function accessibleTabs(){
   if(u.isAdmin || u.canAccessWarehouse || u.isWarehouseManager) tabs.push({ key:"warehouse", label:"انبار کالا" });
   if(u.isAdmin) tabs.push({ key:"users", label:"کاربران" });
   if(u.isAdmin) tabs.push({ key:"logs", label:"لاگ فعالیت‌ها" });
-  if(u.isAdmin) tabs.push({ key:"integration", label:"سفارشات سایت" });
+  if(u.isAdmin) tabs.push({ key:"integration", label:"سفارشات اینترنتی" });
   return tabs;
 }
 
@@ -521,7 +523,7 @@ async function loadForTab(tab){
   try{
     if(tab === "dashboard") DB.dashboard = await api("/dashboard");
     else if(tab === "batches") DB.batches = await api("/batches");
-    else if(tab === "customers") DB.customers = await api("/customers");
+    else if(tab === "customers"){ UI.customerSearch = ""; DB.customers = await api("/customers"); }
     else if(tab === "warehouse") DB.items = await api("/items");
     else if(tab === "users") DB.users = await api("/users");
     else if(tab === "logs") await loadLogs();
@@ -949,11 +951,12 @@ function renderBatchDetail(){
             <div class="invoice-row">
               <div class="r1"><span class="name">${esc(s.customer || "مشتری بدون نام")}</span><span class="date">${fmtDate(s.date)}</span></div>
               <div class="r2"><span>${fmt(s.qty)} ${esc(s.unit || b.unit)} × ${fmt(s.unitPrice)} تومان</span><span class="tot">${fmt(s.total)} تومان</span></div>
+              ${s.blockCount ? `<div class="r3">تعداد بلوک: ${fmt(s.blockCount)} — میانگین وزن هر بلوک: ${fmt(toNum(s.qty)/toNum(s.blockCount))} ${esc(s.unit || b.unit)}</div>` : ""}
               <div class="r2">
                 <span>پرداخت‌شده: ${fmt(s.paidAmount)} تومان</span>
                 <span style="font-weight:800;color:${due > 0 ? 'var(--danger-text)' : 'var(--primary)'};">مانده: ${fmt(due)} تومان</span>
               </div>
-              ${s.paymentTrackingNumber ? `<div class="r3">شماره پیگیری پرداخت: ${esc(s.paymentTrackingNumber)}</div>` : ""}
+              ${(s.payments && s.payments.length > 0) ? `<div class="r3">پرداخت‌ها: ${s.payments.map(p => `${esc(p.method)}: ${fmt(p.amount)} تومان${p.trackingNumber ? ` (پیگیری: ${esc(p.trackingNumber)})` : ""}`).join(" | ")}</div>` : ""}
               <div class="r3">شماره پیگیری فاکتور: <span style="font-family:monospace;">${esc(s.id)}</span></div>
               <div class="r4">
                 <button class="btn small ghost" data-action="edit-sale" data-id="${s.id}">ویرایش</button>
@@ -1023,26 +1026,30 @@ function renderWarehouseTab(){
 function renderCustomersTab(){
   return `
     <div class="stat-row two">
-      <div class="chip"><div class="v">${fmt(DB.customers.length)}</div><div class="l">تعداد مشتریان</div></div>
+      <div class="chip"><div class="v">${fmt(DB.customers.length)}</div><div class="l">تعداد مشتریان${UI.customerSearch ? ' (با جستجوی فعلی)' : ''}</div></div>
       <div class="chip good"><div class="v">${fmt(DB.customers.filter(c=>c.phone).length)}</div><div class="l">دارای شماره تماس</div></div>
     </div>
     <div class="section-head">
       <h2>مشتریان</h2>
       <button class="btn primary" data-action="new-customer">+ مشتری جدید</button>
     </div>
+    <label class="field">
+      <input class="inp" id="customer-search-input" value="${esc(UI.customerSearch)}" placeholder="جستجو بر اساس نام یا شماره تماس…" />
+    </label>
     ${DB.customers.length === 0 ? `
       <div class="empty">
-        <p>هنوز مشتری‌ای ثبت نشده است.</p>
-        <button class="btn primary" data-action="new-customer">افزودن مشتری</button>
+        <p>${UI.customerSearch ? 'مشتری‌ای با این مشخصات پیدا نشد.' : 'هنوز مشتری‌ای ثبت نشده است.'}</p>
+        ${UI.customerSearch ? `<button class="btn secondary" data-action="clear-customer-search">پاک کردن جستجو</button>` : `<button class="btn primary" data-action="new-customer">افزودن مشتری</button>`}
       </div>` : `
       <div class="wh-card-wrap">
         <table class="wh">
-          <thead><tr><th>نام و نام خانوادگی</th><th>شماره تماس</th><th>آدرس</th><th>عملیات</th></tr></thead>
+          <thead><tr><th>نام و نام خانوادگی</th><th>شماره تماس</th><th>کد ملی</th><th>آدرس</th><th>عملیات</th></tr></thead>
           <tbody>
             ${DB.customers.map(c => `
               <tr>
                 <td>${esc(c.fullName)}</td>
                 <td style="color:var(--muted);white-space:nowrap;">${c.phone ? esc(c.phone) : '<span style="color:var(--muted2)">—</span>'}</td>
+                <td style="color:var(--muted);white-space:nowrap;">${c.nationalId ? esc(c.nationalId) : '<span style="color:var(--muted2)">—</span>'}</td>
                 <td style="color:var(--muted);max-width:280px;">${c.address ? esc(c.address) : '<span style="color:var(--muted2)">—</span>'}</td>
                 <td>
                   <div class="wh-actions">
@@ -1519,10 +1526,14 @@ async function openSaleModal(batchId, sale){
   try{ DB.customers = await api("/customers"); }catch(e){ /* دراپ‌داون فقط بدون گزینه می‌ماند */ }
   const editing = !!sale;
   const batch = (UI.batchDetail && UI.batchDetail.id === batchId) ? UI.batchDetail : DB.batches.find(x => x.id === batchId);
-  const s = sale || { batchId, date: todayISO(), qty:"", unitPrice:"", customer:"", customerId:"", paidAmount:"0", paymentTrackingNumber:"", note:"" };
+  const s = sale || { batchId, date: todayISO(), qty:"", unitPrice:"", customer:"", customerId:"", payments:[], note:"" };
 
   const matchedCustomer = s.customerId ? DB.customers.find(c => c.id === s.customerId) : null;
-  const isCustomCustomer = !!s.customer && !matchedCustomer;
+
+  // اگر فاکتور قدیمی paidAmount داشته ولی هیچ ردیف payments، برای سازگاری یک ردیف اولیه بسازیم
+  let initialPayments = (s.payments && s.payments.length > 0)
+    ? s.payments
+    : (toNum(s.paidAmount) > 0 ? [{ method: PAYMENT_METHODS[PAYMENT_METHODS.length-1], amount: s.paidAmount, trackingNumber: s.paymentTrackingNumber || "" }] : []);
 
   modalShell(editing ? "ویرایش فاکتور فروش" : "فاکتور فروش جدید", `
     <div id="modal-err" class="login-err" style="display:none;"></div>
@@ -1536,27 +1547,36 @@ async function openSaleModal(batchId, sale){
     <label class="field"><span class="lbl">قیمت واحد (تومان)</span><input type="number" min="0" class="inp" id="f-unitPrice" value="${esc(s.unitPrice)}" /></label>
     <div class="total-preview">جمع فاکتور: <b id="f-total-preview">${fmt(toNum(s.qty)*toNum(s.unitPrice))}</b> تومان</div>
 
-    <label class="field"><span class="lbl">مبلغ پرداخت‌شده (تومان)</span><input type="number" min="0" class="inp" id="f-paidAmount" value="${esc(s.paidAmount ?? 0)}" /></label>
-    <div class="total-preview" id="f-due-preview" style="margin-top:-8px;">
-      مبلغ مانده: <b>${fmt(toNum(s.qty)*toNum(s.unitPrice) - toNum(s.paidAmount ?? 0))}</b> تومان
-    </div>
-    <label class="field"><span class="lbl">شماره پیگیری پرداخت (اختیاری)</span>
-      <input class="inp" id="f-paymentTrackingNumber" value="${esc(s.paymentTrackingNumber)}" placeholder="شماره پیگیری رسید پرداخت مشتری" />
+    <label class="field"><span class="lbl">تعداد بلوک (اختیاری)</span>
+      <input type="number" min="0" class="inp" id="f-blockCount" value="${esc(s.blockCount ?? '')}" placeholder="مثلاً 40" />
     </label>
-    ${editing ? `<div class="hint" style="margin:-8px 0 14px;">شماره پیگیری این فاکتور: <span style="font-family:monospace;">${esc(s.id)}</span></div>` : ""}
+    <div class="total-preview" id="f-block-avg-preview" style="margin-top:-8px;">
+      میانگین وزن هر بلوک: <b id="f-block-avg">${toNum(s.blockCount) > 0 ? fmt(toNum(s.qty) / toNum(s.blockCount)) : '—'}</b> ${esc(s.unit || (batch?batch.unit:''))}
+    </div>
+    <label class="field" style="margin-bottom:8px;"><span class="lbl">روش‌های پرداخت</span></label>
+    <div id="payments-container">
+      ${initialPayments.map(paymentRowHtml).join("")}
+    </div>
+    <button type="button" class="btn small secondary" data-action="add-payment-row" style="margin-bottom:10px;">+ افزودن روش پرداخت</button>
+    <div class="total-preview" id="f-due-preview">
+      جمع پرداختی: <b id="f-paid-total">${fmt(initialPayments.reduce((a,p)=>a+toNum(p.amount),0))}</b> تومان —
+      مانده: <b id="f-due-amount">${fmt(toNum(s.qty)*toNum(s.unitPrice) - initialPayments.reduce((a,p)=>a+toNum(p.amount),0))}</b> تومان
+    </div>
+    ${editing ? `<div class="hint" style="margin:0 0 14px;">شماره پیگیری این فاکتور: <span style="font-family:monospace;">${esc(s.id)}</span></div>` : ""}
+
     <label class="field"><span class="lbl">مشتری (اختیاری)</span>
-      <select class="inp" id="f-customerId">
-        <option value="">— بدون مشتری خاص —</option>
-        ${DB.customers.map(c => `<option value="${c.id}" ${matchedCustomer && matchedCustomer.id===c.id ? 'selected':''}>${esc(c.fullName)}${c.phone ? ' — ' + esc(c.phone) : ''}</option>`).join("")}
-        <option value="__custom__" ${isCustomCustomer ? 'selected':''}>نام دیگر (تایپ دستی)</option>
-      </select>
-      <input class="inp" id="f-customer-custom" style="margin-top:8px;${isCustomCustomer ? '' : 'display:none;'}" value="${esc(isCustomCustomer ? s.customer : '')}" placeholder="نام و نام خانوادگی مشتری" />
-      <div id="f-customer-custom-extra" class="row2" style="margin-top:8px;${isCustomCustomer ? '' : 'display:none;'}">
-        <input class="inp" id="f-customer-custom-phone" value="" placeholder="شماره تماس (اختیاری)" />
-        <input class="inp" id="f-customer-custom-address" value="" placeholder="آدرس (اختیاری)" />
+      <input class="inp" id="f-customer-name" list="customer-names-list" value="${esc(s.customer || '')}" placeholder="نام مشتری را تایپ کنید و از لیست انتخاب کنید…" autocomplete="off" />
+      <datalist id="customer-names-list">
+        ${DB.customers.map(c => `<option value="${esc(c.fullName)}">${c.phone ? esc(c.phone) : ''}</option>`).join("")}
+      </datalist>
+      <div id="f-customer-new-extra" class="row2" style="margin-top:8px;${matchedCustomer ? 'display:none;' : ''}">
+        <input class="inp" id="f-customer-phone" value="" placeholder="شماره تماس (اختیاری)" />
+        <input class="inp" id="f-customer-nationalId" value="" placeholder="کد ملی (اختیاری)" />
       </div>
-      <span class="hint">با تایپ نام جدید، این فرد به‌طور خودکار به لیست «مشتریان» هم اضافه می‌شود.</span>
-      ${DB.customers.length === 0 ? `<span class="hint">هنوز مشتری‌ای در بخش «مشتریان» ثبت نشده؛ می‌توانید همین‌جا نام آزاد تایپ کنید.</span>` : ""}
+      <input class="inp" id="f-customer-address" style="margin-top:8px;${matchedCustomer ? 'display:none;' : ''}" value="" placeholder="آدرس (اختیاری)" />
+      <span class="hint" id="f-customer-hint">
+        ${matchedCustomer ? `متصل به مشتری موجود: ${esc(matchedCustomer.fullName)}${matchedCustomer.phone ? ' — ' + esc(matchedCustomer.phone) : ''}` : 'اگر نام تایپ‌شده در لیست مشتریان نباشد، مشتری جدید به‌طور خودکار ساخته می‌شود.'}
+      </span>
     </label>
     <label class="field"><span class="lbl">توضیحات (اختیاری)</span><textarea class="inp" id="f-note" rows="2">${esc(s.note)}</textarea></label>
     <div class="modal-actions">
@@ -1567,18 +1587,58 @@ async function openSaleModal(batchId, sale){
   const upd = () => {
     const total = toNum(document.getElementById("f-qty").value) * toNum(document.getElementById("f-unitPrice").value);
     document.getElementById("f-total-preview").textContent = fmt(total);
-    const due = total - toNum(document.getElementById("f-paidAmount").value);
-    document.getElementById("f-due-preview").innerHTML = `مبلغ مانده: <b>${fmt(due)}</b> تومان`;
+    recalcPaymentsPreview();
+    recalcBlockAverage();
   };
   document.getElementById("f-qty").addEventListener("input", upd);
   document.getElementById("f-unitPrice").addEventListener("input", upd);
-  document.getElementById("f-paidAmount").addEventListener("input", upd);
-  document.getElementById("f-customerId").addEventListener("change", (e) => {
-    const show = e.target.value === "__custom__";
-    document.getElementById("f-customer-custom").style.display = show ? "" : "none";
-    document.getElementById("f-customer-custom-extra").style.display = show ? "" : "none";
+  document.getElementById("f-blockCount").addEventListener("input", recalcBlockAverage);
+  document.getElementById("f-unit").addEventListener("change", recalcBlockAverage);
+  document.getElementById("f-customer-name").addEventListener("input", (e) => {
+    const typed = e.target.value.trim().toLowerCase();
+    const match = typed ? DB.customers.find(c => c.fullName.trim().toLowerCase() === typed) : null;
+    document.getElementById("f-customer-new-extra").style.display = match ? "none" : "";
+    document.getElementById("f-customer-address").style.display = match ? "none" : "";
+    document.getElementById("f-customer-hint").textContent = match
+      ? `متصل به مشتری موجود: ${match.fullName}${match.phone ? " — " + match.phone : ""}`
+      : (typed ? "این نام در لیست مشتریان نیست؛ با ذخیره‌ی فاکتور، مشتری جدید ساخته می‌شود." : "اگر نام تایپ‌شده در لیست مشتریان نباشد، مشتری جدید به‌طور خودکار ساخته می‌شود.");
   });
   wireJalaliDateField("f-date");
+}
+let rid = 1;
+function paymentRowHtml(p){
+  return `
+    <div class="payment-row" data-row-id="${rid}" style="display:flex;gap:6px;margin-bottom:8px;align-items:center;">
+      <select class="inp" style="flex:1.1;min-width:0;" data-role="method">
+        ${PAYMENT_METHODS.map(m => `<option value="${m}" ${p.method===m?'selected':''}>${m}</option>`).join("")}
+      </select>
+      <input class="inp" type="number" min="0" style="flex:1;min-width:0;" placeholder="مبلغ (تومان)" data-role="amount" value="${esc(p.amount ?? '')}" />
+      <input class="inp" style="flex:1;min-width:0;" placeholder="شماره پیگیری (اختیاری)" data-role="tracking" value="${esc(p.trackingNumber || '')}" />
+      <button type="button" class="btn small danger" data-action="remove-payment-row" data-row-id="${rid}" style="flex-shrink:0;">×</button>
+    </div>
+  `;
+  rid++;
+}
+
+function recalcPaymentsPreview(){
+  const rows = document.querySelectorAll("#payments-container .payment-row");
+  let paid = 0;
+  rows.forEach(r => { paid += toNum(r.querySelector('[data-role="amount"]').value); });
+  const total = toNum(document.getElementById("f-qty").value) * toNum(document.getElementById("f-unitPrice").value);
+  document.getElementById("f-paid-total").textContent = fmt(paid);
+  document.getElementById("f-due-amount").textContent = fmt(total - paid);
+}
+
+function recalcBlockAverage(){
+  const qty = toNum(document.getElementById("f-qty").value);
+  const blockCount = toNum(document.getElementById("f-blockCount").value);
+  const unit = document.getElementById("f-unit").value;
+  const el = document.getElementById("f-block-avg-preview");
+  if(blockCount > 0){
+    el.innerHTML = `میانگین وزن هر بلوک: <b id="f-block-avg">${fmt(qty / blockCount)}</b> ${esc(unit)}`;
+  }else{
+    el.innerHTML = `میانگین وزن هر بلوک: <b id="f-block-avg">—</b> ${esc(unit)}`;
+  }
 }
 
 async function saveSaleFromModal(id, batchId){
@@ -1586,28 +1646,35 @@ async function saveSaleFromModal(id, batchId){
   const unitPrice = document.getElementById("f-unitPrice").value;
   if(!qty || !unitPrice){ modalErr("مقدار و قیمت واحد الزامی است."); document.getElementById("modal-err").style.display="block"; return; }
 
-  const customerSel = document.getElementById("f-customerId").value;
+  const typedName = document.getElementById("f-customer-name").value.trim();
   let customerId = "", customerName = "", newCustomer = null;
-  if(customerSel === "__custom__"){
-    customerName = document.getElementById("f-customer-custom").value.trim();
-    if(customerName){
+  if(typedName){
+    const match = DB.customers.find(c => c.fullName.trim().toLowerCase() === typedName.toLowerCase());
+    if(match){
+      customerId = match.id;
+      customerName = match.fullName;
+    }else{
+      customerName = typedName;
       newCustomer = {
-        fullName: customerName,
-        phone: document.getElementById("f-customer-custom-phone").value.trim(),
-        address: document.getElementById("f-customer-custom-address").value.trim(),
+        fullName: typedName,
+        phone: document.getElementById("f-customer-phone").value.trim(),
+        nationalId: document.getElementById("f-customer-nationalId").value.trim(),
+        address: document.getElementById("f-customer-address").value.trim(),
       };
     }
-  }else if(customerSel){
-    customerId = customerSel;
-    const c = DB.customers.find(x => x.id === customerSel);
-    customerName = c ? c.fullName : "";
   }
+
+  const payments = Array.from(document.querySelectorAll("#payments-container .payment-row")).map(row => ({
+    method: row.querySelector('[data-role="method"]').value,
+    amount: toNum(row.querySelector('[data-role="amount"]').value),
+    trackingNumber: row.querySelector('[data-role="tracking"]').value.trim(),
+  })).filter(p => p.amount > 0);
 
   const payload = {
     batchId, date: document.getElementById("f-date").value, qty: toNum(qty), unitPrice: toNum(unitPrice),
     unit: document.getElementById("f-unit").value,
-    paidAmount: toNum(document.getElementById("f-paidAmount").value),
-    paymentTrackingNumber: document.getElementById("f-paymentTrackingNumber").value.trim(),
+    blockCount: document.getElementById("f-blockCount").value.trim() === "" ? null : toNum(document.getElementById("f-blockCount").value),
+    payments,
     customer: customerName,
     customerId: customerId || null,
     newCustomer,
@@ -1693,21 +1760,30 @@ async function adjustStock(id, delta){
 async function loadItems(){ DB.items = await api("/items"); render(); }
 async function loadBatches(){ DB.batches = await api("/batches"); render(); }
 async function loadUsers(){ DB.users = await api("/users"); render(); }
-async function loadCustomers(){ DB.customers = await api("/customers"); render(); }
+async function loadCustomers(){
+  const q = UI.customerSearch ? "?q=" + encodeURIComponent(UI.customerSearch) : "";
+  DB.customers = await api("/customers" + q);
+  render();
+}
 
 /* ---- customer modal ---- */
 
 function openCustomerModal(customer){
   const editing = !!customer;
-  const c = customer || { fullName:"", phone:"", address:"" };
+  const c = customer || { fullName:"", phone:"", nationalId:"", address:"" };
   modalShell(editing ? "ویرایش مشتری" : "مشتری جدید", `
     <div id="modal-err" class="login-err" style="display:none;"></div>
     <label class="field"><span class="lbl">نام و نام خانوادگی</span>
       <input class="inp" id="f-fullName" value="${esc(c.fullName)}" placeholder="مثلاً رضا احمدی" />
     </label>
-    <label class="field"><span class="lbl">شماره تماس (اختیاری)</span>
-      <input class="inp" id="f-phone" value="${esc(c.phone)}" placeholder="09xxxxxxxxx" />
-    </label>
+    <div class="row2">
+      <label class="field"><span class="lbl">شماره تماس (اختیاری)</span>
+        <input class="inp" id="f-phone" value="${esc(c.phone)}" placeholder="09xxxxxxxxx" />
+      </label>
+      <label class="field"><span class="lbl">کد ملی (اختیاری)</span>
+        <input class="inp" id="f-nationalId" value="${esc(c.nationalId)}" placeholder="۱۰ رقم" />
+      </label>
+    </div>
     <label class="field"><span class="lbl">آدرس (اختیاری)</span>
       <textarea class="inp" id="f-address" rows="2">${esc(c.address)}</textarea>
     </label>
@@ -1724,6 +1800,7 @@ async function saveCustomerFromModal(id){
   const payload = {
     fullName,
     phone: document.getElementById("f-phone").value.trim(),
+    nationalId: document.getElementById("f-nationalId").value.trim(),
     address: document.getElementById("f-address").value.trim(),
   };
   try{
@@ -1763,6 +1840,7 @@ async function openCustomerInvoicesModal(id){
             <div class="r1"><span class="name">کشت: ${esc(s.batch ? s.batch.name : "—")}</span><span class="date">${fmtDate(s.date)}</span></div>
             <div class="r2"><span>${fmt(s.qty)} ${esc(s.unit || "")} × ${fmt(s.unitPrice)} تومان</span><span class="tot">${fmt(s.total)} تومان</span></div>
             <div class="r2"><span>پرداخت‌شده: ${fmt(s.paidAmount)} تومان</span><span style="font-weight:800;color:${due>0?'var(--danger-text)':'var(--primary)'};">مانده: ${fmt(due)} تومان</span></div>
+            ${(s.payments && s.payments.length > 0) ? `<div class="r3">پرداخت‌ها: ${s.payments.map(p => `${esc(p.method)}: ${fmt(p.amount)} تومان`).join(" | ")}</div>` : ""}
             <div class="r3">شماره پیگیری فاکتور: <span style="font-family:monospace;">${esc(s.id)}</span></div>
           </div>
         `;}).join("")}
@@ -1901,12 +1979,25 @@ document.addEventListener("click", async (e) => {
     case "save-purchase": await savePurchaseFromModal(id || null, batchId); break;
 
     case "new-sale": openSaleModal(batchId, null); break;
+    case "add-payment-row":
+      document.getElementById("payments-container").insertAdjacentHTML(
+        "beforeend", paymentRowHtml({ method: PAYMENT_METHODS[0], amount:"", trackingNumber:"" })
+      );
+      recalcPaymentsPreview();
+      break;
+    case "remove-payment-row": {
+      const row = el.closest(".payment-row");
+      if(row) row.remove();
+      recalcPaymentsPreview();
+      break;
+    }
     case "export-sales-excel": await downloadBatchSalesExcel(batchId, el.dataset.batchName || "کشت"); break;
     case "edit-sale": openSaleModal(UI.openBatchId, (UI.batchDetail.sales || []).find(s => s.id === id)); break;
     case "delete-sale": await deleteSale(id, batchId); break;
     case "save-sale": await saveSaleFromModal(id || null, batchId); break;
 
     case "new-customer": openCustomerModal(null); break;
+    case "clear-customer-search": UI.customerSearch = ""; await loadCustomers(); break;
     case "edit-customer": openCustomerModal(DB.customers.find(c => c.id === id)); break;
     case "delete-customer": await deleteCustomer(id); break;
     case "view-customer-invoices": await openCustomerInvoicesModal(id); break;
@@ -1980,6 +2071,27 @@ document.addEventListener("change", async (e) => {
   }catch(err){
     UI.saveError = err.message;
     render();
+  }
+});
+
+let customerSearchTimer = null;
+document.addEventListener("input", (e) => {
+  if(e.target.id === "customer-search-input"){
+    UI.customerSearch = e.target.value;
+    clearTimeout(customerSearchTimer);
+    customerSearchTimer = setTimeout(async () => {
+      await loadCustomers();
+      const inp = document.getElementById("customer-search-input");
+      if(inp){
+        inp.focus();
+        const v = inp.value;
+        inp.setSelectionRange(v.length, v.length);
+      }
+    }, 350);
+    return;
+  }
+  if(e.target.closest && e.target.closest("#payments-container")){
+    recalcPaymentsPreview();
   }
 });
 

@@ -8,6 +8,7 @@ const ActivityLog = require("./activityLog.model");
 const IntegrationSetting = require("./integrationSetting.model");
 const WebOrder = require("./webOrder.model");
 const Customer = require("./customer.model");
+const Payment = require("./payment.model");
 
 // --- associations ---
 Batch.hasMany(Purchase, { foreignKey: "batchId", as: "purchases", onDelete: "CASCADE" });
@@ -28,4 +29,7 @@ WebOrder.belongsTo(Batch, { foreignKey: "batchId", as: "batch" });
 Customer.hasMany(Sale, { foreignKey: "customerId", as: "sales", onDelete: "SET NULL" });
 Sale.belongsTo(Customer, { foreignKey: "customerId", as: "customerRecord" });
 
-module.exports = { sequelize, User, Batch, Item, Purchase, Sale, ActivityLog, IntegrationSetting, WebOrder, Customer };
+Sale.hasMany(Payment, { foreignKey: "saleId", as: "payments", onDelete: "CASCADE" });
+Payment.belongsTo(Sale, { foreignKey: "saleId", as: "sale" });
+
+module.exports = { sequelize, User, Batch, Item, Purchase, Sale, ActivityLog, IntegrationSetting, WebOrder, Customer, Payment };

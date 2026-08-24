@@ -34,7 +34,9 @@ npm start
 - **Batch** (کشت): name, startDate, readyDays, productionQty, unit, note
 - **Item** (کالای انبار): name, unit, stock, location, lowStockThreshold
 - **Purchase** (فاکتور خرید): batchId, itemId, itemName, date, qty, unit, unitPrice, total, supplier, note
-- **Sale** (فاکتور فروش): batchId, date, qty, unit, unitPrice, total, customer, note
+- **Sale** (فاکتور فروش): batchId, date, qty, unit, unitPrice, blockCount (تعداد بلوک؛ اختیاری), total, paidAmount (مجموع خودکار از payments), customer, note
+- **Payment** (روش پرداخت فاکتور فروش): saleId, method, amount, trackingNumber — هر فاکتور فروش می‌تواند چند رکورد Payment داشته باشد (مثلاً بخشی نقد و بخشی کارت‌به‌کارت)
+- **Customer** (مشتری): fullName, phone, nationalId (کد ملی), address
 
 ثبت هر فاکتور خرید به‌صورت خودکار (در یک تراکنش) موجودی کالای مرتبط در انبار را افزایش می‌دهد؛ ویرایش/حذف فاکتور هم اثر قبلی را برمی‌گرداند.
 مقدار «باقیمانده قابل فروش» هر کشت به‌صورت آنی محاسبه می‌شود: `productionQty - مجموع qty فروش‌های همان کشت`.
@@ -93,7 +95,7 @@ Authorization: Bearer <token>
 | Method | مسیر | توضیح |
 |---|---|---|
 | GET | `/api/sales?batchId=...` | لیست |
-| POST | `/api/sales` | `{ batchId, date, qty, unit, unitPrice, paidAmount, paymentTrackingNumber, customer, note }` — اگر `unit` ارسال نشود، واحد پیش‌فرض کشت استفاده می‌شود؛ پاسخ شامل `due` (مانده = total - paidAmount) است؛ اگر مقدار از باقیمانده بیشتر باشد، پاسخ شامل فیلد `warning` هم هست (بلاک نمی‌شود) |
+| POST | `/api/sales` | `{ batchId, date, qty, unit, unitPrice, blockCount, payments, customer, note }` — `blockCount` اختیاری است (تعداد بلوک کمپوست در فاکتور)؛ میانگین وزن هر بلوک (`qty / blockCount`) در فرانت محاسبه و نمایش داده می‌شود و در خروجی اکسل هم ستون جداگانه دارد. `payments` آرایه‌ای از `{ method, amount, trackingNumber }` است (روش‌های پرداخت: نقدی، کارت به کارت، انتقال بانکی (شبا)، چک، سایر)؛ `paidAmount` فاکتور به‌طور خودکار از مجموع مبلغ این آرایه محاسبه می‌شود. اگر `unit` ارسال نشود، واحد پیش‌فرض کشت استفاده می‌شود؛ پاسخ شامل `due` (مانده = total - paidAmount) و آرایه‌ی `payments` است؛ اگر مقدار از باقیمانده بیشتر باشد، پاسخ شامل فیلد `warning` هم هست (بلاک نمی‌شود) |
 | PUT | `/api/sales/:id` | ویرایش |
 | DELETE | `/api/sales/:id` | حذف |
 
@@ -129,11 +131,13 @@ Authorization: Bearer <token>
 |---|---|---|
 | GET | `/api/customers?q=جستجو` | لیست مشتریان (نام و نام خانوادگی، شماره تماس، آدرس) |
 | GET | `/api/customers/:id/invoices` | همه‌ی فاکتورهای فروش این مشتری (از طریق `customerId`)، به‌علاوه فاکتورهای خریدی که همین نام در فیلد «تامین‌کننده» آن‌ها ثبت شده (تطبیق نام، چون فاکتور خرید اتصال رسمی به مشتری ندارد) |
-| POST | `/api/customers` | `{ fullName, phone, address }` |
+| POST | `/api/customers` | `{ fullName, phone, nationalId, address }` |
 | PUT | `/api/customers/:id` | ویرایش |
 | DELETE | `/api/customers/:id` | حذف (فاکتورهای فروش قبلی این مشتری حذف نمی‌شوند؛ فقط ارتباطشان با رکورد مشتری قطع می‌شود و نام مشتری به‌صورت اسنپ‌شات در خودِ فاکتور باقی می‌ماند) |
 
-فاکتور فروش (`POST/PUT /api/sales`) می‌تواند علاوه بر `customer` (نام آزاد)، فیلد اختیاری `customerId` هم بگیرد تا فاکتور به یک رکورد مشتری مشخص متصل شود. به‌جای `customerId`، می‌توان `newCustomer: { fullName, phone, address }` فرستاد تا یک مشتری جدید به‌طور خودکار در جدول `customers` ساخته و به فاکتور متصل شود.
+فاکتور فروش (`POST/PUT /api/sales`) می‌تواند علاوه بر `customer` (نام آزاد)، فیلد اختیاری `customerId` هم بگیرد تا فاکتور به یک رکورد مشتری مشخص متصل شود. به‌جای `customerId`، می‌توان `newCustomer: { fullName, phone, nationalId, address }` فرستاد تا یک مشتری جدید به‌طور خودکار در جدول `customers` ساخته و به فاکتور متصل شود.
+
+> **توجه**: جدول جدید `payments` اضافه شده و ستون‌های قدیمی `payment_tracking_number` روی `sales` دیگر در پاسخ API استفاده نمی‌شود (مقدار `paidAmount` اکنون به‌طور خودکار از مجموع رکوردهای `payments` محاسبه و ذخیره می‌شود، نه از ورودی مستقیم کاربر).
 
 «شماره پیگیری فاکتور» جداگانه ذخیره نمی‌شود؛ همان `id` رکورد فاکتور فروش به‌عنوان شماره پیگیری فاکتور در نظر گرفته می‌شود — و به همین دلیل عمداً به‌جای UUID، یک عدد صعودی ساده (INTEGER AUTO_INCREMENT) است. برای شماره پیگیری رسید پرداخت مشتری (بانک/درگاه)، فیلد جدای `paymentTrackingNumber` وجود دارد.
 
