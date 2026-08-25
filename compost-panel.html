@@ -1578,6 +1578,7 @@ async function openSaleModal(batchId, sale){
         ${matchedCustomer ? `متصل به مشتری موجود: ${esc(matchedCustomer.fullName)}${matchedCustomer.phone ? ' — ' + esc(matchedCustomer.phone) : ''}` : 'اگر نام تایپ‌شده در لیست مشتریان نباشد، مشتری جدید به‌طور خودکار ساخته می‌شود.'}
       </span>
     </label>
+    ${editing ? `` : "<div style='margin-bottom: 7px;'><input type='checkbox' id='sms' name='sms'><label for='sms'>ارسال پیامک برای مشتری</label></div>"}
     <label class="field"><span class="lbl">توضیحات (اختیاری)</span><textarea class="inp" id="f-note" rows="2">${esc(s.note)}</textarea></label>
     <div class="modal-actions">
       <button class="btn primary full" data-action="save-sale" data-id="${editing ? s.id : ''}" data-batch-id="${batchId}">ذخیره</button>
@@ -1644,6 +1645,7 @@ function recalcBlockAverage(){
 async function saveSaleFromModal(id, batchId){
   const qty = document.getElementById("f-qty").value;
   const unitPrice = document.getElementById("f-unitPrice").value;
+  const sms = document.getElementById("sms").value;
   if(!qty || !unitPrice){ modalErr("مقدار و قیمت واحد الزامی است."); document.getElementById("modal-err").style.display="block"; return; }
 
   const typedName = document.getElementById("f-customer-name").value.trim();
@@ -1678,6 +1680,7 @@ async function saveSaleFromModal(id, batchId){
     customer: customerName,
     customerId: customerId || null,
     newCustomer,
+    sms,
     note: document.getElementById("f-note").value.trim(),
   };
   try{

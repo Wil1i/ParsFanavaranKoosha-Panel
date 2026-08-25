@@ -1,5 +1,7 @@
 const { Sale, Batch, Customer, Payment, sequelize } = require("../models");
 const { logActivity } = require("../utils/activityLogger");
+const smsUtil = require("../utils/sms")
+require("dotenv").config();
 
 const PAYMENT_METHODS = ["نقدی", "کارت به کارت", "انتقال بانکی (شبا)", "چک", "سایر"];
 
@@ -10,7 +12,7 @@ const PAYMENT_METHODS = ["نقدی", "کارت به کارت", "انتقال ب�
 async function resolveCustomer(req, { customerId, customer, newCustomer }) {
   if (customerId) {
     const existing = await Customer.findByPk(customerId);
-    if (existing) return { customerId: existing.id, customerName: existing.fullName };
+    if (existing) return { customerId: existing.id, customerName: existing.fullName, phone : "09103438399" };
   }
 
   if (newCustomer && newCustomer.fullName && newCustomer.fullName.trim()) {
@@ -24,10 +26,10 @@ async function resolveCustomer(req, { customerId, customer, newCustomer }) {
       user: req.user, action: "CUSTOMER_CREATE", entityType: "customer", entityId: created.id,
       description: `مشتری «${created.fullName}» از طریق فاکتور فروش ایجاد شد.`,
     });
-    return { customerId: created.id, customerName: created.fullName };
+    return { customerId: created.id, customerName: created.fullName, phone : "09103438399" };
   }
 
-  return { customerId: null, customerName: customer || null };
+  return { customerId: null, customerName: customer || null, phone : null };
 }
 
 /**
@@ -58,11 +60,15 @@ exports.list = async (req, res, next) => {
     next(err);
   }
 };
-
+function fmtDate(iso){
+  if(!iso) return "—";
+  try{ return new Date(iso).toLocaleDateString("fa-IR", { year:"numeric", month:"2-digit", day:"2-digit" }); }
+  catch(e){ return iso; }
+}
 exports.create = async (req, res, next) => {
   const t = await sequelize.transaction();
   try {
-    const { batchId, date, qty, unitPrice, unit, blockCount, customer, customerId, newCustomer, payments, note } = req.body;
+    const { batchId, date, qty, unitPrice, unit, blockCount, customer, customerId, newCustomer, payments, note, sms } = req.body;
     if (!batchId || !date || !qty || !unitPrice) {
       await t.rollback();
       return res.status(400).json({ message: "کشت، تاریخ، مقدار و قیمت واحد الزامی است." });
@@ -114,8 +120,16 @@ exports.create = async (req, res, next) => {
       description: `فاکتور فروش شماره ${sale.id} (${qty} ${sale.unit}، ${total.toLocaleString("fa-IR")} تومان${methodsSummary ? `، پرداخت: ${methodsSummary}` : ""}${due > 0 ? `، مانده ${due.toLocaleString("fa-IR")} تومان` : ""}) برای کشت «${batch.name}»${resolved.customerName ? ` به مشتری «${resolved.customerName}»` : ""} ثبت شد.`,
     });
 
+    if(sms && sms == "on"){
+      smsUtil.send(process.env.FAKTOR_SMS_CODE, resolved.phone + "", [fmtDate(sale.date), sale.qty + " " + sale.unit + "", sale.total + " تومان", sale.paid_amount||0 + ' تومان', sale.paid_amount >= 1 ? (sale.total - sale.paid_amount) : 0 + ' تومان'])
+    }
+
     const full = await Sale.findByPk(sale.id, { include: [{ model: Payment, as: "payments" }] });
-    res.status(201).json({ ...full.toJSON(), due, warning });
+    if(full && Object.keys(full).length >= 1){
+      res.status(201).json({ ...full.toJSON() || {}, due, warning });
+    }else{
+      res.status(201).json({ ... due, warning });
+    }
   } catch (err) {
     await t.rollback();
     next(err);
