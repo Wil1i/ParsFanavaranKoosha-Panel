@@ -910,30 +910,8 @@ function renderBatchDetail(){
       </div>
     </div>
 
-    <div class="two-col">
-      <div class="list-card">
-        <div class="list-card-head">
-          <div>
-            <h3>فاکتورهای خرید</h3>
-            <div class="sum">جمع: ${fmt(b.purchaseCost)} تومان</div>
-          </div>
-          <button class="btn small primary" data-action="new-purchase" data-batch-id="${b.id}">+ فاکتور خرید</button>
-        </div>
-        ${(!b.purchases || b.purchases.length === 0) ? `<div class="empty-mini">فاکتور خریدی ثبت نشده است.</div>` :
-          b.purchases.slice().sort((a,x)=> a.date < x.date ? 1 : -1).map(p => `
-            <div class="invoice-row">
-              <div class="r1"><span class="name">${esc(p.itemName)}</span><span class="date">${fmtDate(p.date)}</span></div>
-              <div class="r2"><span>${fmt(p.qty)} ${esc(p.unit)} × ${fmt(p.unitPrice)} تومان</span><span class="tot">${fmt(p.total)} تومان</span></div>
-              ${p.supplier ? `<div class="r3">تامین‌کننده: ${esc(p.supplier)}</div>` : ""}
-              <div class="r4">
-                <button class="btn small ghost" data-action="edit-purchase" data-id="${p.id}">ویرایش</button>
-                <button class="btn small danger" data-action="delete-purchase" data-id="${p.id}" data-batch-id="${b.id}">حذف</button>
-              </div>
-            </div>
-          `).join("")}
-      </div>
-
-      <div class="list-card">
+    <div class="one-col">
+      <div class="list-card" style="margin-bottom: 7px;">
         <div class="list-card-head">
           <div>
             <h3>فاکتورهای فروش</h3>
@@ -964,6 +942,28 @@ function renderBatchDetail(){
               </div>
             </div>
           `;}).join("")}
+      </div>
+
+      <div class="list-card">
+        <div class="list-card-head">
+          <div>
+            <h3>فاکتورهای خرید</h3>
+            <div class="sum">جمع: ${fmt(b.purchaseCost)} تومان</div>
+          </div>
+          <button class="btn small primary" data-action="new-purchase" data-batch-id="${b.id}">+ فاکتور خرید</button>
+        </div>
+        ${(!b.purchases || b.purchases.length === 0) ? `<div class="empty-mini">فاکتور خریدی ثبت نشده است.</div>` :
+          b.purchases.slice().sort((a,x)=> a.date < x.date ? 1 : -1).map(p => `
+            <div class="invoice-row">
+              <div class="r1"><span class="name">${esc(p.itemName)}</span><span class="date">${fmtDate(p.date)}</span></div>
+              <div class="r2"><span>${fmt(p.qty)} ${esc(p.unit)} × ${fmt(p.unitPrice)} تومان</span><span class="tot">${fmt(p.total)} تومان</span></div>
+              ${p.supplier ? `<div class="r3">تامین‌کننده: ${esc(p.supplier)}</div>` : ""}
+              <div class="r4">
+                <button class="btn small ghost" data-action="edit-purchase" data-id="${p.id}">ویرایش</button>
+                <button class="btn small danger" data-action="delete-purchase" data-id="${p.id}" data-batch-id="${b.id}">حذف</button>
+              </div>
+            </div>
+          `).join("")}
       </div>
     </div>
   `;
@@ -1606,8 +1606,11 @@ async function openSaleModal(batchId, sale){
   });
   wireJalaliDateField("f-date");
 }
-let rid = 1;
+
+function tempRowId(){ return "row-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+
 function paymentRowHtml(p){
+  const rid = tempRowId();
   return `
     <div class="payment-row" data-row-id="${rid}" style="display:flex;gap:6px;margin-bottom:8px;align-items:center;">
       <select class="inp" style="flex:1.1;min-width:0;" data-role="method">
@@ -1618,7 +1621,6 @@ function paymentRowHtml(p){
       <button type="button" class="btn small danger" data-action="remove-payment-row" data-row-id="${rid}" style="flex-shrink:0;">×</button>
     </div>
   `;
-  rid++;
 }
 
 function recalcPaymentsPreview(){
@@ -1645,7 +1647,7 @@ function recalcBlockAverage(){
 async function saveSaleFromModal(id, batchId){
   const qty = document.getElementById("f-qty").value;
   const unitPrice = document.getElementById("f-unitPrice").value;
-  const sms = document.getElementById("sms").value;
+  const sms = document.getElementById("sms").checked;
   if(!qty || !unitPrice){ modalErr("مقدار و قیمت واحد الزامی است."); document.getElementById("modal-err").style.display="block"; return; }
 
   const typedName = document.getElementById("f-customer-name").value.trim();
@@ -1995,7 +1997,7 @@ document.addEventListener("click", async (e) => {
       break;
     }
     case "export-sales-excel": await downloadBatchSalesExcel(batchId, el.dataset.batchName || "کشت"); break;
-    case "edit-sale": openSaleModal(UI.openBatchId, (UI.batchDetail.sales || []).find(s => s.id === id)); break;
+    case "edit-sale": openSaleModal(UI.openBatchId, (UI.batchDetail.sales || []).find(s => String(s.id) === String(id))); break;
     case "delete-sale": await deleteSale(id, batchId); break;
     case "save-sale": await saveSaleFromModal(id || null, batchId); break;
 
