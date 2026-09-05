@@ -1647,7 +1647,7 @@ function recalcBlockAverage(){
 async function saveSaleFromModal(id, batchId){
   const qty = document.getElementById("f-qty").value;
   const unitPrice = document.getElementById("f-unitPrice").value;
-  const sms = document.getElementById("sms").checked;
+  const sms = document.getElementById("sms")?.checked || false;
   if(!qty || !unitPrice){ modalErr("مقدار و قیمت واحد الزامی است."); document.getElementById("modal-err").style.display="block"; return; }
 
   const typedName = document.getElementById("f-customer-name").value.trim();

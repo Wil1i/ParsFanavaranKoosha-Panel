@@ -12,7 +12,7 @@ const PAYMENT_METHODS = ["نقدی", "کارت به کارت", "انتقال ب�
 async function resolveCustomer(req, { customerId, customer, newCustomer }) {
   if (customerId) {
     const existing = await Customer.findByPk(customerId);
-    if (existing) return { customerId: existing.id, customerName: existing.fullName, phone : "09103438399" };
+    if (existing) return { customerId: existing.id, customerName: existing.fullName, phone : existing.phone };
   }
 
   if (newCustomer && newCustomer.fullName && newCustomer.fullName.trim()) {
@@ -119,7 +119,7 @@ exports.create = async (req, res, next) => {
       user: req.user, action: "SALE_CREATE", entityType: "sale", entityId: sale.id,
       description: `فاکتور فروش شماره ${sale.id} (${qty} ${sale.unit}، ${total.toLocaleString("fa-IR")} تومان${methodsSummary ? `، پرداخت: ${methodsSummary}` : ""}${due > 0 ? `، مانده ${due.toLocaleString("fa-IR")} تومان` : ""}) برای کشت «${batch.name}»${resolved.customerName ? ` به مشتری «${resolved.customerName}»` : ""} ثبت شد.`,
     });
-    
+
     if(sms && sms == true){
       smsUtil.send(process.env.FAKTOR_SMS_CODE, resolved.phone + "", [fmtDate(sale.date), sale.qty + " " + sale.unit + "", sale.total + " تومان", sale.paid_amount||0 + ' تومان', sale.paid_amount >= 1 ? (sale.total - sale.paid_amount) : 0 + ' تومان'])
     }
