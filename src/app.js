@@ -13,6 +13,7 @@ const activityLogRoutes = require("./routes/activityLog.routes");
 const integrationRoutes = require("./routes/integration.routes");
 const webOrderRoutes = require("./routes/weborder.routes");
 const customerRoutes = require("./routes/customer.routes");
+const chequeRoutes = require("./routes/cheque.routes");
 const { notFound, errorHandler } = require("./middleware/error.middleware");
 
 const app = express();
@@ -34,6 +35,7 @@ app.use("/api/logs", activityLogRoutes);
 app.use("/api/integrations", integrationRoutes);
 app.use("/api/web-orders", webOrderRoutes);
 app.use("/api/customers", customerRoutes);
+app.use("/api/cheques", chequeRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

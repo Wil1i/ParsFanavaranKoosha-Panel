@@ -44,6 +44,13 @@ const Purchase = sequelize.define("Purchase", {
     type: DataTypes.FLOAT,
     allowNull: false,
   },
+  paidAmount: {
+    // مجموع خودکار از روش‌های پرداخت (payments) این فاکتور خرید — پرداختی به تامین‌کننده
+    type: DataTypes.FLOAT,
+    allowNull: false,
+    defaultValue: 0,
+    field: "paid_amount",
+  },
   supplier: {
     type: DataTypes.STRING(150),
     allowNull: true,

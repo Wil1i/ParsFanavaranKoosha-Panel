@@ -32,4 +32,7 @@ Sale.belongsTo(Customer, { foreignKey: "customerId", as: "customerRecord" });
 Sale.hasMany(Payment, { foreignKey: "saleId", as: "payments", onDelete: "CASCADE" });
 Payment.belongsTo(Sale, { foreignKey: "saleId", as: "sale" });
 
+Purchase.hasMany(Payment, { foreignKey: "purchaseId", as: "payments", onDelete: "CASCADE" });
+Payment.belongsTo(Purchase, { foreignKey: "purchaseId", as: "purchase" });
+
 module.exports = { sequelize, User, Batch, Item, Purchase, Sale, ActivityLog, IntegrationSetting, WebOrder, Customer, Payment };

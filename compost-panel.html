@@ -295,7 +295,7 @@ function loadAuthFromStorage(){
 function clearAuthStorage(){
   try{ localStorage.removeItem(AUTH_STORAGE_KEY); }catch(e){ /* storage unavailable */ }
 }
-let DB = { batches: [], items: [], users: [], dashboard: null, logs: null, integrationSettings: null, webOrders: null, customers: [] };
+let DB = { batches: [], items: [], users: [], dashboard: null, logs: null, integrationSettings: null, webOrders: null, customers: [], cheques: null };
 let UI = {
   tab: null,
   openBatchId: null,
@@ -309,6 +309,7 @@ let UI = {
   integrationBusy: false,
   integrationMessage: "",
   customerSearch: "",
+  chequeFilters: { direction:"", status:"" },
 };
 
 /* ===================== helpers ===================== */
@@ -491,6 +492,7 @@ function accessibleTabs(){
   const tabs = [{ key:"dashboard", label:"داشبورد" }];
   if(u.isAdmin || u.canAccessBatches) tabs.push({ key:"batches", label:"کشت‌ها" });
   if(u.isAdmin || u.canAccessBatches) tabs.push({ key:"customers", label:"مشتریان" });
+  if(u.isAdmin || u.canAccessBatches) tabs.push({ key:"cheques", label:"چک‌ها" });
   if(u.isAdmin || u.canAccessWarehouse || u.isWarehouseManager) tabs.push({ key:"warehouse", label:"انبار کالا" });
   if(u.isAdmin) tabs.push({ key:"users", label:"کاربران" });
   if(u.isAdmin) tabs.push({ key:"logs", label:"لاگ فعالیت‌ها" });
@@ -514,7 +516,7 @@ async function afterLogin(){
 function logout(){
   AUTH = { token:null, user:null };
   clearAuthStorage();
-  DB = { batches:[], items:[], users:[], dashboard:null, logs:null, integrationSettings:null, webOrders:null, customers:[] };
+  DB = { batches:[], items:[], users:[], dashboard:null, logs:null, integrationSettings:null, webOrders:null, customers:[], cheques:null };
   UI = { tab:null, openBatchId:null, batchDetail:null, menuOpen:false, saveError:"", loginError:"", busy:false };
   render();
 }
@@ -524,6 +526,7 @@ async function loadForTab(tab){
     if(tab === "dashboard") DB.dashboard = await api("/dashboard");
     else if(tab === "batches") DB.batches = await api("/batches");
     else if(tab === "customers"){ UI.customerSearch = ""; DB.customers = await api("/customers"); }
+    else if(tab === "cheques") await loadCheques();
     else if(tab === "warehouse") DB.items = await api("/items");
     else if(tab === "users") DB.users = await api("/users");
     else if(tab === "logs") await loadLogs();
@@ -682,6 +685,7 @@ function renderTabContent(){
   }
   if(UI.tab === "warehouse") return renderWarehouseTab();
   if(UI.tab === "customers") return renderCustomersTab();
+  if(UI.tab === "cheques") return renderChequesTab();
   if(UI.tab === "users") return renderUsersTab();
   if(UI.tab === "logs") return renderLogsTab();
   if(UI.tab === "integration") return renderIntegrationTab();
@@ -750,6 +754,24 @@ function renderDashboardTab(){
             <div class="invoice-row">
               <div class="r1"><span class="name">${esc(s.customer || "مشتری بدون نام")}</span><span class="date">${fmtDate(s.date)}</span></div>
               <div class="r2"><span>کشت: ${esc(s.batchName)}</span><span class="tot">${fmt(s.total)} تومان</span></div>
+            </div>
+          `).join("")}
+      </div>
+
+      <div class="list-card" style="margin-top:20px;">
+        <div class="list-card-head"><h3>چک‌های نزدیک به سررسید</h3></div>
+        ${(!d.upcomingCheques || d.upcomingCheques.length === 0) ? `<div class="empty-mini">چکی با سررسید نزدیک ثبت نشده است.</div>` :
+          d.upcomingCheques.map(c => `
+            <div class="invoice-row" style="${c.isOverdue ? 'background:var(--danger-bg);border-radius:10px;padding:10px 12px;' : ''}">
+              <div class="r1">
+                <span class="name">${c.counterparty ? esc(c.counterparty) : (c.direction==='received' ? 'مشتری نامشخص' : 'تامین‌کننده نامشخص')}</span>
+                <span class="date">${fmtDate(c.dueDate)}${c.isOverdue ? ` <span class="badge danger" style="margin-right:6px;">گذشته</span>` : ""}</span>
+              </div>
+              <div class="r2">
+                <span><span class="badge ${c.direction==='received'?'ready':'pending'}">${c.direction==='received' ? 'دریافتی' : 'پرداختی'}</span>${c.batchName ? ` — کشت: ${esc(c.batchName)}` : ""}</span>
+                <span class="tot">${fmt(c.amount)} تومان</span>
+              </div>
+              ${c.sayadNumber ? `<div class="r3">شماره صیادی: ${esc(c.sayadNumber)}</div>` : ""}
             </div>
           `).join("")}
       </div>
@@ -875,6 +897,49 @@ function renderBatchTableRow(b){
   `;
 }
 
+function summarizeSalesList(sales){
+  sales = sales || [];
+  const invoiceCount = sales.length;
+  const totalAmount = sales.reduce((s,x) => s + toNum(x.total), 0);
+  const totalPaid = sales.reduce((s,x) => s + toNum(x.paidAmount), 0);
+  const totalUnpaid = totalAmount - totalPaid;
+  const unpaidCount = sales.filter(x => (toNum(x.total) - toNum(x.paidAmount)) > 0).length;
+
+  const methodTotals = {};
+  PAYMENT_METHODS.forEach(m => { methodTotals[m] = 0; });
+  sales.forEach(s => {
+    (s.payments || []).forEach(p => {
+      const key = PAYMENT_METHODS.includes(p.method) ? p.method : "سایر";
+      methodTotals[key] = (methodTotals[key] || 0) + toNum(p.amount);
+    });
+  });
+
+  return { invoiceCount, totalAmount, totalPaid, totalUnpaid, unpaidCount, methodTotals };
+}
+
+function computeSalesSummary(b){
+  return summarizeSalesList(b.sales);
+}
+
+function renderSalesSummaryPanel(b){
+  const s = computeSalesSummary(b);
+  return `
+    <div class="panel" style="margin-bottom:20px;">
+      <div class="panel-head" style="margin-bottom:14px;">
+        <div><h2 style="font-size:15px;">خلاصه فروش این کشت</h2></div>
+      </div>
+      <div class="stat-row">
+        <div class="chip"><div class="v">${fmt(s.invoiceCount)}</div><div class="l">تعداد فاکتور فروش</div></div>
+        <div class="chip good"><div class="v">${fmt(s.totalAmount)}</div><div class="l">جمع فروش (تومان)</div></div>
+        <div class="chip ${s.totalUnpaid > 0 ? 'warn' : 'good'}"><div class="v">${fmt(s.totalUnpaid)}</div><div class="l">پرداخت‌نشده (تومان)</div></div>
+      </div>
+      <div class="stat-row five" style="margin-bottom:0;">
+        ${PAYMENT_METHODS.map(m => `<div class="chip"><div class="v">${fmt(s.methodTotals[m])}</div><div class="l">${esc(m)}</div></div>`).join("")}
+      </div>
+    </div>
+  `;
+}
+
 function renderBatchDetail(){
   if(!UI.batchDetail){
     return `
@@ -910,8 +975,33 @@ function renderBatchDetail(){
       </div>
     </div>
 
-    <div class="one-col">
-      <div class="list-card" style="margin-bottom: 7px;">
+    ${renderSalesSummaryPanel(b)}
+
+    <div class="two-col">
+      <div class="list-card">
+        <div class="list-card-head">
+          <div>
+            <h3>فاکتورهای خرید</h3>
+            <div class="sum">جمع: ${fmt(b.purchaseCost)} تومان</div>
+          </div>
+          <button class="btn small primary" data-action="new-purchase" data-batch-id="${b.id}">+ فاکتور خرید</button>
+        </div>
+        ${(!b.purchases || b.purchases.length === 0) ? `<div class="empty-mini">فاکتور خریدی ثبت نشده است.</div>` :
+          b.purchases.slice().sort((a,x)=> a.date < x.date ? 1 : -1).map(p => `
+            <div class="invoice-row">
+              <div class="r1"><span class="name">${esc(p.itemName)}</span><span class="date">${fmtDate(p.date)}</span></div>
+              <div class="r2"><span>${fmt(p.qty)} ${esc(p.unit)} × ${fmt(p.unitPrice)} تومان</span><span class="tot">${fmt(p.total)} تومان</span></div>
+              ${p.supplier ? `<div class="r3">تامین‌کننده: ${esc(p.supplier)}</div>` : ""}
+              ${(p.payments && p.payments.length > 0) ? `<div class="r3">پرداخت‌ها: ${p.payments.map(pm => `${esc(pm.method)}: ${fmt(pm.amount)} تومان${pm.method==='چک' && pm.dueDate ? ` (سررسید: ${fmtDate(pm.dueDate)})` : ''}`).join(" | ")}</div>` : ""}
+              <div class="r4">
+                <button class="btn small ghost" data-action="edit-purchase" data-id="${p.id}">ویرایش</button>
+                <button class="btn small danger" data-action="delete-purchase" data-id="${p.id}" data-batch-id="${b.id}">حذف</button>
+              </div>
+            </div>
+          `).join("")}
+      </div>
+
+      <div class="list-card">
         <div class="list-card-head">
           <div>
             <h3>فاکتورهای فروش</h3>
@@ -934,7 +1024,7 @@ function renderBatchDetail(){
                 <span>پرداخت‌شده: ${fmt(s.paidAmount)} تومان</span>
                 <span style="font-weight:800;color:${due > 0 ? 'var(--danger-text)' : 'var(--primary)'};">مانده: ${fmt(due)} تومان</span>
               </div>
-              ${(s.payments && s.payments.length > 0) ? `<div class="r3">پرداخت‌ها: ${s.payments.map(p => `${esc(p.method)}: ${fmt(p.amount)} تومان${p.trackingNumber ? ` (پیگیری: ${esc(p.trackingNumber)})` : ""}`).join(" | ")}</div>` : ""}
+              ${(s.payments && s.payments.length > 0) ? `<div class="r3">پرداخت‌ها: ${s.payments.map(p => `${esc(p.method)}: ${fmt(p.amount)} تومان${p.trackingNumber ? ` (${p.method==='چک'?'صیادی':'پیگیری'}: ${esc(p.trackingNumber)})` : ""}${p.method==='چک' && p.dueDate ? ` (سررسید: ${fmtDate(p.dueDate)})` : ""}`).join(" | ")}</div>` : ""}
               <div class="r3">شماره پیگیری فاکتور: <span style="font-family:monospace;">${esc(s.id)}</span></div>
               <div class="r4">
                 <button class="btn small ghost" data-action="edit-sale" data-id="${s.id}">ویرایش</button>
@@ -942,28 +1032,6 @@ function renderBatchDetail(){
               </div>
             </div>
           `;}).join("")}
-      </div>
-
-      <div class="list-card">
-        <div class="list-card-head">
-          <div>
-            <h3>فاکتورهای خرید</h3>
-            <div class="sum">جمع: ${fmt(b.purchaseCost)} تومان</div>
-          </div>
-          <button class="btn small primary" data-action="new-purchase" data-batch-id="${b.id}">+ فاکتور خرید</button>
-        </div>
-        ${(!b.purchases || b.purchases.length === 0) ? `<div class="empty-mini">فاکتور خریدی ثبت نشده است.</div>` :
-          b.purchases.slice().sort((a,x)=> a.date < x.date ? 1 : -1).map(p => `
-            <div class="invoice-row">
-              <div class="r1"><span class="name">${esc(p.itemName)}</span><span class="date">${fmtDate(p.date)}</span></div>
-              <div class="r2"><span>${fmt(p.qty)} ${esc(p.unit)} × ${fmt(p.unitPrice)} تومان</span><span class="tot">${fmt(p.total)} تومان</span></div>
-              ${p.supplier ? `<div class="r3">تامین‌کننده: ${esc(p.supplier)}</div>` : ""}
-              <div class="r4">
-                <button class="btn small ghost" data-action="edit-purchase" data-id="${p.id}">ویرایش</button>
-                <button class="btn small danger" data-action="delete-purchase" data-id="${p.id}" data-batch-id="${b.id}">حذف</button>
-              </div>
-            </div>
-          `).join("")}
       </div>
     </div>
   `;
@@ -1066,7 +1134,71 @@ function renderCustomersTab(){
   `;
 }
 
-/* ===================== users ===================== */
+/* ===================== cheques ===================== */
+
+function renderChequesTab(){
+  const data = DB.cheques;
+  const f = UI.chequeFilters;
+
+  return `
+    <div class="section-head">
+      <h2>چک‌ها (دریافتی و پرداختی)</h2>
+      <button class="btn secondary" data-action="cheques-refresh">↻ به‌روزرسانی</button>
+    </div>
+
+    ${!data ? `<div class="empty"><p><span class="spin"></span> در حال بارگذاری…</p></div>` : `
+      <div class="stat-row four">
+        <div class="chip"><div class="v">${fmt(data.total)}</div><div class="l">تعداد چک</div></div>
+        <div class="chip good"><div class="v">${fmt(data.totalReceived)}</div><div class="l">جمع دریافتی (تومان)</div></div>
+        <div class="chip"><div class="v">${fmt(data.totalPaid)}</div><div class="l">جمع پرداختی (تومان)</div></div>
+        <div class="chip ${data.overdueCount > 0 ? 'warn' : 'good'}"><div class="v">${fmt(data.overdueCount)}</div><div class="l">سررسید گذشته</div></div>
+      </div>
+
+      <div class="panel" style="margin-bottom:16px;">
+        <div class="row2" style="grid-template-columns:1fr 1fr;">
+          <label class="field" style="margin-bottom:0;"><span class="lbl">جهت</span>
+            <select class="inp" id="cheque-f-direction">
+              <option value="">همه</option>
+              <option value="received" ${f.direction==='received'?'selected':''}>دریافتی (از مشتری)</option>
+              <option value="paid" ${f.direction==='paid'?'selected':''}>پرداختی (به تامین‌کننده)</option>
+            </select>
+          </label>
+          <label class="field" style="margin-bottom:0;"><span class="lbl">وضعیت سررسید</span>
+            <select class="inp" id="cheque-f-status">
+              <option value="">همه</option>
+              <option value="overdue" ${f.status==='overdue'?'selected':''}>سررسید گذشته</option>
+              <option value="upcoming" ${f.status==='upcoming'?'selected':''}>آینده</option>
+            </select>
+          </label>
+        </div>
+        <div class="modal-actions" style="margin-top:14px;">
+          <button class="btn primary" data-action="cheques-apply-filter">اعمال فیلتر</button>
+          <button class="btn ghost" data-action="cheques-clear-filter">پاک کردن فیلترها</button>
+        </div>
+      </div>
+
+      ${data.cheques.length === 0 ? `<div class="empty"><p>چکی با این فیلتر یافت نشد.</p></div>` : `
+      <div class="wh-card-wrap">
+        <table class="wh">
+          <thead><tr><th>سررسید</th><th>جهت</th><th>طرف حساب</th><th>کشت</th><th>مبلغ (تومان)</th><th>شماره صیادی</th><th>وضعیت</th></tr></thead>
+          <tbody>
+            ${data.cheques.map(c => `
+              <tr style="${c.isOverdue ? 'background:var(--danger-bg);' : ''}">
+                <td style="white-space:nowrap;">${fmtDate(c.dueDate)}</td>
+                <td><span class="badge ${c.direction==='received'?'ready':'pending'}">${c.direction==='received' ? 'دریافتی' : 'پرداختی'}</span></td>
+                <td>${c.counterparty ? esc(c.counterparty) : '<span style="color:var(--muted2)">—</span>'}</td>
+                <td style="color:var(--muted);white-space:nowrap;">${c.batchName ? esc(c.batchName) : '—'}</td>
+                <td style="font-weight:700;">${fmt(c.amount)}</td>
+                <td style="font-family:monospace;">${c.sayadNumber ? esc(c.sayadNumber) : '<span style="color:var(--muted2)">—</span>'}</td>
+                <td>${c.isOverdue ? `<span class="badge danger">سررسید گذشته</span>` : `<span class="badge ready">آینده</span>`}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>`}
+    `}
+  `;
+}
 
 function accessLabel(u){
   const parts = [];
@@ -1459,7 +1591,8 @@ async function downloadBatchSalesExcel(batchId, batchName){
 async function openPurchaseModal(batchId, purchase){
   try{ DB.items = await api("/items"); }catch(e){ /* datalist just won't have suggestions */ }
   const editing = !!purchase;
-  const p = purchase || { batchId, date: todayISO(), itemName:"", qty:"", unit:"کیلوگرم", unitPrice:"", supplier:"", note:"" };
+  const p = purchase || { batchId, date: todayISO(), itemName:"", qty:"", unit:"کیلوگرم", unitPrice:"", supplier:"", payments:[], note:"" };
+  const initialPayments = p.payments || [];
   modalShell(editing ? "ویرایش فاکتور خرید" : "فاکتور خرید جدید", `
     <div id="modal-err" class="login-err" style="display:none;"></div>
     <label class="field"><span class="lbl">تاریخ</span>${jalaliDateFieldHtml("f-date", p.date)}</label>
@@ -1476,6 +1609,13 @@ async function openPurchaseModal(batchId, purchase){
     </div>
     <label class="field"><span class="lbl">قیمت واحد (تومان)</span><input type="number" min="0" class="inp" id="f-unitPrice" value="${esc(p.unitPrice)}" /></label>
     <div class="total-preview">جمع فاکتور: <b id="f-total-preview">${fmt(toNum(p.qty)*toNum(p.unitPrice))}</b> تومان</div>
+
+    <label class="field" style="margin-bottom:8px;"><span class="lbl">روش‌های پرداخت (اختیاری — پرداختی به تامین‌کننده)</span></label>
+    <div id="payments-container">
+      ${initialPayments.map(paymentRowHtml).join("")}
+    </div>
+    <button type="button" class="btn small secondary" data-action="add-payment-row" style="margin-bottom:14px;">+ افزودن روش پرداخت</button>
+
     <label class="field"><span class="lbl">تامین‌کننده (اختیاری)</span><input class="inp" id="f-supplier" value="${esc(p.supplier)}" /></label>
     <label class="field"><span class="lbl">توضیحات (اختیاری)</span><textarea class="inp" id="f-note" rows="2">${esc(p.note)}</textarea></label>
     <div class="modal-actions">
@@ -1490,6 +1630,7 @@ async function openPurchaseModal(batchId, purchase){
   document.getElementById("f-qty").addEventListener("input", upd);
   document.getElementById("f-unitPrice").addEventListener("input", upd);
   wireJalaliDateField("f-date");
+  wireAllPaymentRows();
 }
 
 async function savePurchaseFromModal(id, batchId){
@@ -1497,9 +1638,22 @@ async function savePurchaseFromModal(id, batchId){
   const qty = document.getElementById("f-qty").value;
   const unitPrice = document.getElementById("f-unitPrice").value;
   if(!itemName || !qty || !unitPrice){ modalErr("نام کالا، مقدار و قیمت واحد الزامی است."); document.getElementById("modal-err").style.display="block"; return; }
+
+  const payments = Array.from(document.querySelectorAll("#payments-container .payment-row")).map(row => {
+    const method = row.querySelector('[data-role="method"]').value;
+    const dueDateInput = row.querySelector(".cheque-duedate-wrap input[type=\"hidden\"]");
+    return {
+      method,
+      amount: toNum(row.querySelector('[data-role="amount"]').value),
+      trackingNumber: row.querySelector('[data-role="tracking"]').value.trim(),
+      dueDate: (method === "چک" && dueDateInput) ? dueDateInput.value : null,
+    };
+  }).filter(p => p.amount > 0);
+
   const payload = {
     batchId, date: document.getElementById("f-date").value, itemName,
     qty: toNum(qty), unit: document.getElementById("f-unit").value, unitPrice: toNum(unitPrice),
+    payments,
     supplier: document.getElementById("f-supplier").value.trim(),
     note: document.getElementById("f-note").value.trim(),
   };
@@ -1605,22 +1759,42 @@ async function openSaleModal(batchId, sale){
       : (typed ? "این نام در لیست مشتریان نیست؛ با ذخیره‌ی فاکتور، مشتری جدید ساخته می‌شود." : "اگر نام تایپ‌شده در لیست مشتریان نباشد، مشتری جدید به‌طور خودکار ساخته می‌شود.");
   });
   wireJalaliDateField("f-date");
+  wireAllPaymentRows();
 }
 
 function tempRowId(){ return "row-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
 
 function paymentRowHtml(p){
   const rid = tempRowId();
+  const isCheque = p.method === "چک";
   return `
-    <div class="payment-row" data-row-id="${rid}" style="display:flex;gap:6px;margin-bottom:8px;align-items:center;">
-      <select class="inp" style="flex:1.1;min-width:0;" data-role="method">
-        ${PAYMENT_METHODS.map(m => `<option value="${m}" ${p.method===m?'selected':''}>${m}</option>`).join("")}
-      </select>
-      <input class="inp" type="number" min="0" style="flex:1;min-width:0;" placeholder="مبلغ (تومان)" data-role="amount" value="${esc(p.amount ?? '')}" />
-      <input class="inp" style="flex:1;min-width:0;" placeholder="شماره پیگیری (اختیاری)" data-role="tracking" value="${esc(p.trackingNumber || '')}" />
-      <button type="button" class="btn small danger" data-action="remove-payment-row" data-row-id="${rid}" style="flex-shrink:0;">×</button>
+    <div class="payment-row" data-row-id="${rid}" style="border:1px solid #eee8d6;border-radius:10px;padding:10px;margin-bottom:8px;">
+      <div style="display:flex;gap:6px;align-items:center;">
+        <select class="inp" style="flex:1.1;min-width:0;" data-role="method">
+          ${PAYMENT_METHODS.map(m => `<option value="${m}" ${p.method===m?'selected':''}>${m}</option>`).join("")}
+        </select>
+        <input class="inp" type="number" min="0" style="flex:1;min-width:0;" placeholder="مبلغ (تومان)" data-role="amount" value="${esc(p.amount ?? '')}" />
+        <button type="button" class="btn small danger" data-action="remove-payment-row" data-row-id="${rid}" style="flex-shrink:0;">×</button>
+      </div>
+      <div style="margin-top:8px;">
+        <input class="inp" data-role="tracking" placeholder="${isCheque ? 'شماره صیادی چک' : 'شماره پیگیری (اختیاری)'}" value="${esc(p.trackingNumber || '')}" />
+      </div>
+      <div class="cheque-duedate-wrap" data-row="${rid}" style="margin-top:8px;${isCheque ? '' : 'display:none;'}">
+        <span style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px;">تاریخ سررسید چک</span>
+        ${jalaliDateFieldHtml("payment-duedate-" + rid, p.dueDate || "")}
+      </div>
     </div>
   `;
+}
+
+function wirePaymentRow(rid){
+  wireJalaliDateField("payment-duedate-" + rid);
+}
+
+function wireAllPaymentRows(){
+  document.querySelectorAll("#payments-container .payment-row").forEach(row => {
+    wirePaymentRow(row.dataset.rowId);
+  });
 }
 
 function recalcPaymentsPreview(){
@@ -1668,11 +1842,16 @@ async function saveSaleFromModal(id, batchId){
     }
   }
 
-  const payments = Array.from(document.querySelectorAll("#payments-container .payment-row")).map(row => ({
-    method: row.querySelector('[data-role="method"]').value,
-    amount: toNum(row.querySelector('[data-role="amount"]').value),
-    trackingNumber: row.querySelector('[data-role="tracking"]').value.trim(),
-  })).filter(p => p.amount > 0);
+  const payments = Array.from(document.querySelectorAll("#payments-container .payment-row")).map(row => {
+    const method = row.querySelector('[data-role="method"]').value;
+    const dueDateInput = row.querySelector(".cheque-duedate-wrap input[type=\"hidden\"]");
+    return {
+      method,
+      amount: toNum(row.querySelector('[data-role="amount"]').value),
+      trackingNumber: row.querySelector('[data-role="tracking"]').value.trim(),
+      dueDate: (method === "چک" && dueDateInput) ? dueDateInput.value : null,
+    };
+  }).filter(p => p.amount > 0);
 
   const payload = {
     batchId, date: document.getElementById("f-date").value, qty: toNum(qty), unitPrice: toNum(unitPrice),
@@ -1771,6 +1950,16 @@ async function loadCustomers(){
   render();
 }
 
+async function loadCheques(){
+  const f = UI.chequeFilters;
+  const params = new URLSearchParams();
+  if(f.direction) params.set("direction", f.direction);
+  if(f.status) params.set("status", f.status);
+  const qs = params.toString();
+  DB.cheques = await api("/cheques" + (qs ? "?" + qs : ""));
+  render();
+}
+
 /* ---- customer modal ---- */
 
 function openCustomerModal(customer){
@@ -1827,14 +2016,20 @@ async function openCustomerInvoicesModal(id){
   modalShell("فاکتورهای مشتری", `<div class="empty" style="padding:30px 0;"><p><span class="spin"></span> در حال بارگذاری…</p></div>`, true);
   try{
     const data = await api("/customers/" + id + "/invoices");
-    const totalSales = data.sales.reduce((s,x) => s + toNum(x.total), 0);
     const totalPurchases = data.purchases.reduce((s,x) => s + toNum(x.total), 0);
+    const summary = summarizeSalesList(data.sales);
 
     modalShell(`فاکتورهای «${data.customer.fullName}»`, `
-      <div class="stat-row two" style="margin-bottom:16px;">
-        <div class="chip good"><div class="v">${fmt(totalSales)}</div><div class="l">جمع فاکتورهای فروش (تومان)</div></div>
-        <div class="chip"><div class="v">${fmt(totalPurchases)}</div><div class="l">جمع فاکتورهای خرید (تومان)</div></div>
+      <div class="stat-row four" style="margin-bottom:10px;">
+        <div class="chip"><div class="v">${fmt(summary.invoiceCount)}</div><div class="l">تعداد فاکتور فروش</div></div>
+        <div class="chip good"><div class="v">${fmt(summary.totalAmount)}</div><div class="l">جمع فروش (تومان)</div></div>
+        <div class="chip ${summary.totalUnpaid > 0 ? 'warn' : 'good'}"><div class="v">${fmt(summary.totalUnpaid)}</div><div class="l">مانده کل (تومان)</div></div>
+        <div class="chip ${summary.unpaidCount > 0 ? 'warn' : 'good'}"><div class="v">${fmt(summary.unpaidCount)}</div><div class="l">فاکتور دارای مانده</div></div>
       </div>
+      <div class="stat-row five" style="margin-bottom:16px;">
+        ${PAYMENT_METHODS.map(m => `<div class="chip"><div class="v">${fmt(summary.methodTotals[m])}</div><div class="l">${esc(m)}</div></div>`).join("")}
+      </div>
+      <div class="chip" style="margin-bottom:16px;"><div class="v">${fmt(totalPurchases)}</div><div class="l">جمع فاکتورهای خرید (تومان)</div></div>
 
       <h3 style="font-size:14.5px;margin:0 0 10px;">فاکتورهای فروش</h3>
       ${data.sales.length === 0 ? `<div class="empty-mini">فاکتور فروشی برای این مشتری ثبت نشده است.</div>` :
@@ -1842,10 +2037,13 @@ async function openCustomerInvoicesModal(id){
           const due = toNum(s.total) - toNum(s.paidAmount);
           return `
           <div class="invoice-row">
-            <div class="r1"><span class="name">کشت: ${esc(s.batch ? s.batch.name : "—")}</span><span class="date">${fmtDate(s.date)}</span></div>
+            <div class="r1">
+              <span class="name">کشت: ${esc(s.batch ? s.batch.name : "—")}</span>
+              <span class="date">${fmtDate(s.date)}${due > 0 ? ` <span class="badge pending" style="margin-right:6px;">مانده‌دار</span>` : ""}</span>
+            </div>
             <div class="r2"><span>${fmt(s.qty)} ${esc(s.unit || "")} × ${fmt(s.unitPrice)} تومان</span><span class="tot">${fmt(s.total)} تومان</span></div>
             <div class="r2"><span>پرداخت‌شده: ${fmt(s.paidAmount)} تومان</span><span style="font-weight:800;color:${due>0?'var(--danger-text)':'var(--primary)'};">مانده: ${fmt(due)} تومان</span></div>
-            ${(s.payments && s.payments.length > 0) ? `<div class="r3">پرداخت‌ها: ${s.payments.map(p => `${esc(p.method)}: ${fmt(p.amount)} تومان`).join(" | ")}</div>` : ""}
+            ${(s.payments && s.payments.length > 0) ? `<div class="r3">پرداخت‌ها: ${s.payments.map(p => `${esc(p.method)}: ${fmt(p.amount)} تومان${p.method==='چک' && p.dueDate ? ` (سررسید: ${fmtDate(p.dueDate)})` : ""}`).join(" | ")}</div>` : ""}
             <div class="r3">شماره پیگیری فاکتور: <span style="font-family:monospace;">${esc(s.id)}</span></div>
           </div>
         `;}).join("")}
@@ -1984,12 +2182,16 @@ document.addEventListener("click", async (e) => {
     case "save-purchase": await savePurchaseFromModal(id || null, batchId); break;
 
     case "new-sale": openSaleModal(batchId, null); break;
-    case "add-payment-row":
-      document.getElementById("payments-container").insertAdjacentHTML(
-        "beforeend", paymentRowHtml({ method: PAYMENT_METHODS[0], amount:"", trackingNumber:"" })
+    case "add-payment-row": {
+      const container = document.getElementById("payments-container");
+      container.insertAdjacentHTML(
+        "beforeend", paymentRowHtml({ method: PAYMENT_METHODS[0], amount:"", trackingNumber:"", dueDate:"" })
       );
+      const rows = container.querySelectorAll(".payment-row");
+      wirePaymentRow(rows[rows.length - 1].dataset.rowId);
       recalcPaymentsPreview();
       break;
+    }
     case "remove-payment-row": {
       const row = el.closest(".payment-row");
       if(row) row.remove();
@@ -2003,6 +2205,17 @@ document.addEventListener("click", async (e) => {
 
     case "new-customer": openCustomerModal(null); break;
     case "clear-customer-search": UI.customerSearch = ""; await loadCustomers(); break;
+
+    case "cheques-refresh": await loadCheques(); break;
+    case "cheques-apply-filter":
+      UI.chequeFilters.direction = document.getElementById("cheque-f-direction").value;
+      UI.chequeFilters.status = document.getElementById("cheque-f-status").value;
+      await loadCheques();
+      break;
+    case "cheques-clear-filter":
+      UI.chequeFilters = { direction:"", status:"" };
+      await loadCheques();
+      break;
     case "edit-customer": openCustomerModal(DB.customers.find(c => c.id === id)); break;
     case "delete-customer": await deleteCustomer(id); break;
     case "view-customer-invoices": await openCustomerInvoicesModal(id); break;
@@ -2065,6 +2278,17 @@ document.addEventListener("click", async (e) => {
 });
 
 document.addEventListener("change", async (e) => {
+  const methodSelect = e.target.closest('.payment-row select[data-role="method"]');
+  if(methodSelect){
+    const row = methodSelect.closest(".payment-row");
+    const isCheque = methodSelect.value === "چک";
+    const trackingInput = row.querySelector('[data-role="tracking"]');
+    trackingInput.placeholder = isCheque ? "شماره صیادی چک" : "شماره پیگیری (اختیاری)";
+    const wrap = row.querySelector(".cheque-duedate-wrap");
+    if(wrap) wrap.style.display = isCheque ? "" : "none";
+    return;
+  }
+
   const el = e.target.closest('[data-action="weborder-assign-batch"]');
   if(!el) return;
   const id = el.dataset.id;

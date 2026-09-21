@@ -1,5 +1,6 @@
-const { Purchase, Item, Batch, sequelize } = require("../models");
+const { Purchase, Item, Batch, Payment, sequelize } = require("../models");
 const { logActivity } = require("../utils/activityLogger");
+const { sanitizePayments } = require("../utils/payments");
 
 async function findOrCreateItem(name, unit, t) {
   const existing = await Item.findOne({
@@ -17,7 +18,10 @@ exports.list = async (req, res, next) => {
   try {
     const where = {};
     if (req.query.batchId) where.batchId = req.query.batchId;
-    const purchases = await Purchase.findAll({ where, order: [["date", "DESC"]] });
+    const purchases = await Purchase.findAll({
+      where, order: [["date", "DESC"]],
+      include: [{ model: Payment, as: "payments" }],
+    });
     res.json(purchases);
   } catch (err) {
     next(err);
@@ -27,7 +31,7 @@ exports.list = async (req, res, next) => {
 exports.create = async (req, res, next) => {
   const t = await sequelize.transaction();
   try {
-    const { batchId, date, itemName, qty, unit, unitPrice, supplier, note } = req.body;
+    const { batchId, date, itemName, qty, unit, unitPrice, supplier, payments, note } = req.body;
     if (!batchId || !date || !itemName || !qty || !unitPrice) {
       await t.rollback();
       return res.status(400).json({ message: "کشت، تاریخ، نام کالا، مقدار و قیمت واحد الزامی است." });
@@ -43,6 +47,9 @@ exports.create = async (req, res, next) => {
     item.stock = Number(item.stock) + Number(qty);
     await item.save({ transaction: t });
 
+    const cleanPayments = sanitizePayments(payments);
+    const paidAmount = cleanPayments.reduce((s, p) => s + p.amount, 0);
+
     const purchase = await Purchase.create({
       batchId,
       itemId: item.id,
@@ -52,16 +59,26 @@ exports.create = async (req, res, next) => {
       unit: unit || item.unit,
       unitPrice,
       total: Number(qty) * Number(unitPrice),
+      paidAmount,
       supplier: supplier || null,
       note: note || null,
     }, { transaction: t });
 
+    if (cleanPayments.length > 0) {
+      await Payment.bulkCreate(
+        cleanPayments.map((p) => ({ ...p, purchaseId: purchase.id })),
+        { transaction: t }
+      );
+    }
+
     await t.commit();
+    const methodsSummary = cleanPayments.map((p) => `${p.method}: ${p.amount.toLocaleString("fa-IR")} تومان`).join("، ");
     await logActivity({
       user: req.user, action: "PURCHASE_CREATE", entityType: "purchase", entityId: purchase.id,
-      description: `فاکتور خرید «${item.name}» (${qty} ${purchase.unit}، ${purchase.total.toLocaleString("fa-IR")} تومان) برای کشت «${batch.name}» ثبت شد.`,
+      description: `فاکتور خرید «${item.name}» (${qty} ${purchase.unit}، ${purchase.total.toLocaleString("fa-IR")} تومان${methodsSummary ? `، پرداخت: ${methodsSummary}` : ""}) برای کشت «${batch.name}» ثبت شد.`,
     });
-    res.status(201).json(purchase);
+    const full = await Purchase.findByPk(purchase.id, { include: [{ model: Payment, as: "payments" }] });
+    res.status(201).json(full);
   } catch (err) {
     await t.rollback();
     next(err);
@@ -86,7 +103,7 @@ exports.update = async (req, res, next) => {
       }
     }
 
-    const { date, itemName, qty, unit, unitPrice, supplier, note } = req.body;
+    const { date, itemName, qty, unit, unitPrice, supplier, payments, note } = req.body;
     const finalItemName = itemName !== undefined ? itemName : purchase.itemName;
     const finalUnit = unit !== undefined ? unit : purchase.unit;
     const finalQty = qty !== undefined ? qty : purchase.qty;
@@ -105,6 +122,19 @@ exports.update = async (req, res, next) => {
     purchase.total = Number(finalQty) * Number(finalUnitPrice);
     if (supplier !== undefined) purchase.supplier = supplier;
     if (note !== undefined) purchase.note = note;
+
+    if (payments !== undefined) {
+      const cleanPayments = sanitizePayments(payments);
+      await Payment.destroy({ where: { purchaseId: purchase.id }, transaction: t });
+      if (cleanPayments.length > 0) {
+        await Payment.bulkCreate(
+          cleanPayments.map((p) => ({ ...p, purchaseId: purchase.id })),
+          { transaction: t }
+        );
+      }
+      purchase.paidAmount = cleanPayments.reduce((s, p) => s + p.amount, 0);
+    }
+
     await purchase.save({ transaction: t });
 
     await t.commit();
@@ -112,7 +142,8 @@ exports.update = async (req, res, next) => {
       user: req.user, action: "PURCHASE_UPDATE", entityType: "purchase", entityId: purchase.id,
       description: `فاکتور خرید «${purchase.itemName}» (${purchase.total.toLocaleString("fa-IR")} تومان) ویرایش شد.`,
     });
-    res.json(purchase);
+    const full = await Purchase.findByPk(purchase.id, { include: [{ model: Payment, as: "payments" }] });
+    res.json(full);
   } catch (err) {
     await t.rollback();
     next(err);
@@ -134,6 +165,7 @@ exports.remove = async (req, res, next) => {
         await item.save({ transaction: t });
       }
     }
+    await Payment.destroy({ where: { purchaseId: purchase.id }, transaction: t });
     await purchase.destroy({ transaction: t });
     await t.commit();
     await logActivity({

@@ -1,4 +1,4 @@
-const { Batch, Item, Purchase, Sale, User } = require("../models");
+const { Batch, Item, Purchase, Sale, User, Payment } = require("../models");
 const { batchMeta } = require("../utils/batchMeta");
 
 exports.summary = async (req, res, next) => {
@@ -74,6 +74,42 @@ exports.summary = async (req, res, next) => {
         recentPurchases,
         recentSales,
       };
+
+      // چک‌هایی که سررسیدشان نزدیک است (یا از قبل گذشته و هنوز در پنل ثبت مانده)
+      const cheques = await Payment.findAll({
+        where: { method: "چک" },
+        include: [
+          { model: Sale, as: "sale", include: [{ model: Batch, as: "batch", attributes: ["id", "name"] }] },
+          { model: Purchase, as: "purchase", include: [{ model: Batch, as: "batch", attributes: ["id", "name"] }] },
+        ],
+      });
+
+      const today = new Date().toISOString().slice(0, 10);
+      const horizon = new Date();
+      horizon.setDate(horizon.getDate() + 14);
+      const horizonStr = horizon.toISOString().slice(0, 10);
+
+      const upcomingCheques = cheques
+        .filter((p) => p.dueDate && (p.saleId || p.purchaseId) && p.dueDate <= horizonStr)
+        .map((p) => {
+          const direction = p.saleId ? "received" : "paid";
+          const source = p.saleId ? p.sale : p.purchase;
+          const batch = source && source.batch ? source.batch : null;
+          return {
+            id: p.id,
+            direction,
+            amount: p.amount,
+            sayadNumber: p.trackingNumber,
+            dueDate: p.dueDate,
+            isOverdue: p.dueDate < today,
+            batchName: batch ? batch.name : null,
+            counterparty: direction === "received" ? (source ? source.customer : null) : (source ? source.supplier : null),
+          };
+        })
+        .sort((a, c) => (a.dueDate < c.dueDate ? -1 : a.dueDate > c.dueDate ? 1 : 0))
+        .slice(0, 8);
+
+      out.upcomingCheques = upcomingCheques;
     }
 
     if (req.user.isAdmin || req.user.canAccessWarehouse || req.user.isWarehouseManager) {

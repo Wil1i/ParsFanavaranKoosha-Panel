@@ -2,8 +2,9 @@ const { DataTypes } = require("sequelize");
 const sequelize = require("../config/db");
 
 /**
- * هر فاکتور فروش می‌تواند چند روش پرداخت مختلف داشته باشد
- * (مثلاً بخشی نقد، بخشی کارت‌به‌کارت)، هرکدام با شماره پیگیری مخصوص خودش.
+ * هر فاکتور فروش یا خرید می‌تواند چند روش پرداخت مختلف داشته باشد
+ * (مثلاً بخشی نقد، بخشی کارت‌به‌کارت، بخشی چک)، هرکدام با شماره پیگیری مخصوص خودش.
+ * saleId یعنی این پرداخت «دریافتی» است (از مشتری)، purchaseId یعنی «پرداختی» است (به تامین‌کننده).
  */
 const Payment = sequelize.define("Payment", {
   id: {
@@ -13,8 +14,13 @@ const Payment = sequelize.define("Payment", {
   },
   saleId: {
     type: DataTypes.INTEGER,
-    allowNull: false,
+    allowNull: true,
     field: "sale_id",
+  },
+  purchaseId: {
+    type: DataTypes.UUID,
+    allowNull: true,
+    field: "purchase_id",
   },
   method: {
     // نقدی | کارت به کارت | انتقال بانکی (شبا) | چک | سایر
@@ -27,10 +33,16 @@ const Payment = sequelize.define("Payment", {
     defaultValue: 0,
   },
   trackingNumber: {
-    // شماره پیگیری رسید همین روش پرداخت
+    // شماره پیگیری رسید همین روش پرداخت؛ برای روش «چک» همان شماره صیادی است
     type: DataTypes.STRING(100),
     allowNull: true,
     field: "tracking_number",
+  },
+  dueDate: {
+    // فقط برای روش پرداخت «چک»: تاریخ سررسید
+    type: DataTypes.DATEONLY,
+    allowNull: true,
+    field: "due_date",
   },
 }, {
   tableName: "payments",

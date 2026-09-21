@@ -1,10 +1,8 @@
 const { Sale, Batch, Customer, Payment, sequelize } = require("../models");
 const { logActivity } = require("../utils/activityLogger");
+const { sanitizePayments } = require("../utils/payments");
 const smsUtil = require("../utils/sms")
 require("dotenv").config();
-
-const PAYMENT_METHODS = ["نقدی", "کارت به کارت", "انتقال بانکی (شبا)", "چک", "سایر"];
-
 /**
  * از customerId موجود استفاده می‌کند، یا در صورت ارسال newCustomer (نام + تلفن + کد ملی + آدرس)
  * یک مشتری جدید در جدول customers می‌سازد و به فاکتور متصل می‌کند.
@@ -26,25 +24,10 @@ async function resolveCustomer(req, { customerId, customer, newCustomer }) {
       user: req.user, action: "CUSTOMER_CREATE", entityType: "customer", entityId: created.id,
       description: `مشتری «${created.fullName}» از طریق فاکتور فروش ایجاد شد.`,
     });
-    return { customerId: created.id, customerName: created.fullName, phone : "09103438399" };
+    return { customerId: created.id, customerName: created.fullName, phone : created.phone };
   }
 
   return { customerId: null, customerName: customer || null, phone : null };
-}
-
-/**
- * لیست ورودی روش‌های پرداخت را پاک‌سازی و معتبرسازی می‌کند.
- * ورودی: [{ method, amount, trackingNumber }, ...]
- */
-function sanitizePayments(payments) {
-  if (!Array.isArray(payments)) return [];
-  return payments
-    .map((p) => ({
-      method: (p.method || "").trim() || "سایر",
-      amount: Number(p.amount) || 0,
-      trackingNumber: (p.trackingNumber || "").trim() || null,
-    }))
-    .filter((p) => p.amount > 0);
 }
 
 exports.list = async (req, res, next) => {
@@ -125,11 +108,7 @@ exports.create = async (req, res, next) => {
     }
 
     const full = await Sale.findByPk(sale.id, { include: [{ model: Payment, as: "payments" }] });
-    if(full && Object.keys(full).length >= 1){
-      res.status(201).json({ ...full.toJSON() || {}, due, warning });
-    }else{
-      res.status(201).json({ ... due, warning });
-    }
+    res.status(201).json({ ...full.toJSON(), due, warning });
   } catch (err) {
     await t.rollback();
     next(err);

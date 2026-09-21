@@ -36,6 +36,8 @@ npm start
 - **Purchase** (فاکتور خرید): batchId, itemId, itemName, date, qty, unit, unitPrice, total, supplier, note
 - **Sale** (فاکتور فروش): batchId, date, qty, unit, unitPrice, blockCount (تعداد بلوک؛ اختیاری), total, paidAmount (مجموع خودکار از payments), customer, note
 - **Payment** (روش پرداخت فاکتور فروش): saleId, method, amount, trackingNumber — هر فاکتور فروش می‌تواند چند رکورد Payment داشته باشد (مثلاً بخشی نقد و بخشی کارت‌به‌کارت)
+- **Payment** (روش پرداخت فاکتور فروش/خرید): saleId یا purchaseId (یکی از این دو)، method، amount، trackingNumber (برای چک = شماره صیادی)، dueDate (فقط برای چک = تاریخ سررسید)
+- **Purchase** (فاکتور خرید): batchId, itemId, itemName, date, qty, unit, unitPrice, total, paidAmount (مجموع خودکار از payments), supplier, note
 - **Customer** (مشتری): fullName, phone, nationalId (کد ملی), address
 
 ثبت هر فاکتور خرید به‌صورت خودکار (در یک تراکنش) موجودی کالای مرتبط در انبار را افزایش می‌دهد؛ ویرایش/حذف فاکتور هم اثر قبلی را برمی‌گرداند.
@@ -87,7 +89,7 @@ Authorization: Bearer <token>
 | Method | مسیر | توضیح |
 |---|---|---|
 | GET | `/api/purchases?batchId=...` | لیست (با فیلتر اختیاری بر اساس کشت) |
-| POST | `/api/purchases` | `{ batchId, date, itemName, qty, unit, unitPrice, supplier, note }` — کالا در انبار خودکار پیدا/ساخته و موجودی‌اش افزایش می‌یابد |
+| POST | `/api/purchases` | `{ batchId, date, itemName, qty, unit, unitPrice, supplier, payments, note }` — کالا در انبار خودکار پیدا/ساخته و موجودی‌اش افزایش می‌یابد. `payments` (اختیاری) همان آرایه‌ی روش‌های پرداخت است (پرداختی به تامین‌کننده)؛ برای چک از `dueDate` هم استفاده کنید |
 | PUT | `/api/purchases/:id` | ویرایش (اثر موجودی قبلی برگردانده و اثر جدید اعمال می‌شود) |
 | DELETE | `/api/purchases/:id` | حذف (اثر روی موجودی برگردانده می‌شود) |
 
@@ -95,7 +97,7 @@ Authorization: Bearer <token>
 | Method | مسیر | توضیح |
 |---|---|---|
 | GET | `/api/sales?batchId=...` | لیست |
-| POST | `/api/sales` | `{ batchId, date, qty, unit, unitPrice, blockCount, payments, customer, note }` — `blockCount` اختیاری است (تعداد بلوک کمپوست در فاکتور)؛ میانگین وزن هر بلوک (`qty / blockCount`) در فرانت محاسبه و نمایش داده می‌شود و در خروجی اکسل هم ستون جداگانه دارد. `payments` آرایه‌ای از `{ method, amount, trackingNumber }` است (روش‌های پرداخت: نقدی، کارت به کارت، انتقال بانکی (شبا)، چک، سایر)؛ `paidAmount` فاکتور به‌طور خودکار از مجموع مبلغ این آرایه محاسبه می‌شود. اگر `unit` ارسال نشود، واحد پیش‌فرض کشت استفاده می‌شود؛ پاسخ شامل `due` (مانده = total - paidAmount) و آرایه‌ی `payments` است؛ اگر مقدار از باقیمانده بیشتر باشد، پاسخ شامل فیلد `warning` هم هست (بلاک نمی‌شود) |
+| POST | `/api/sales` | `{ batchId, date, qty, unit, unitPrice, blockCount, payments, customer, note }` — `blockCount` اختیاری است (تعداد بلوک کمپوست در فاکتور)؛ میانگین وزن هر بلوک (`qty / blockCount`) در فرانت محاسبه و نمایش داده می‌شود و در خروجی اکسل هم ستون جداگانه دارد. `payments` آرایه‌ای از `{ method, amount, trackingNumber, dueDate }` است (روش‌های پرداخت: نقدی، کارت به کارت، انتقال بانکی (شبا)، چک، سایر)؛ برای روش «چک»، `trackingNumber` همان شماره صیادی است و `dueDate` تاریخ سررسید چک. `paidAmount` فاکتور به‌طور خودکار از مجموع مبلغ این آرایه محاسبه می‌شود. اگر `unit` ارسال نشود، واحد پیش‌فرض کشت استفاده می‌شود؛ پاسخ شامل `due` (مانده = total - paidAmount) و آرایه‌ی `payments` است؛ اگر مقدار از باقیمانده بیشتر باشد، پاسخ شامل فیلد `warning` هم هست (بلاک نمی‌شود) |
 | PUT | `/api/sales/:id` | ویرایش |
 | DELETE | `/api/sales/:id` | حذف |
 
@@ -109,7 +111,7 @@ Authorization: Bearer <token>
 ### داشبورد
 | Method | مسیر | توضیح |
 |---|---|---|
-| GET | `/api/dashboard` | گزارش جامع؛ خروجی بر اساس دسترسی کاربر واردشده فیلتر می‌شود (بخش `batches` فقط برای دارندگان دسترسی کشت‌ها، `warehouse` فقط برای دارندگان دسترسی انبار، `users` فقط برای ادمین) |
+| GET | `/api/dashboard` | گزارش جامع؛ خروجی بر اساس دسترسی کاربر واردشده فیلتر می‌شود (بخش `batches` فقط برای دارندگان دسترسی کشت‌ها، `warehouse` فقط برای دارندگان دسترسی انبار، `users` فقط برای ادمین). همراه با `batches`، آرایه‌ی `upcomingCheques` هم برمی‌گردد: تا ۸ چک با نزدیک‌ترین سررسید (در بازه‌ی ۱۴ روز آینده، به‌همراه چک‌های سررسیدگذشته‌ی ثبت‌شده)، هرکدام با جهت (دریافتی/پرداختی)، مبلغ، شماره صیادی، سررسید و `isOverdue` |
 
 ### اتصال فروشگاه اینترنتی (وردپرس/ووکامرس) — فقط ادمین
 | Method | مسیر | توضیح |
@@ -125,6 +127,11 @@ Authorization: Bearer <token>
 | PATCH | `/api/web-orders/:id/assign-batch` | `{ batchId }` — اتصال یک سفارش وب به یک کشت مشخص (زیرساخت آماده؛ رابط کاربری آن قدم بعدی است) |
 
 > **پیش‌نیاز**: سایت وردپرس باید ووکامرس نصب داشته باشد و روی HTTPS باشد (چون این پیاده‌سازی از Basic Auth با Consumer Key/Secret استفاده می‌کند که ووکامرس فقط روی HTTPS آن را می‌پذیرد؛ برای سایت‌های بدون HTTPS باید OAuth 1.0a پیاده‌سازی شود که در این نسخه پشتیبانی نمی‌شود). کلید و رمز را از مسیر ووکامرس → تنظیمات → پیشرفته → REST API در وردپرس بسازید.
+
+### چک‌ها
+| Method | مسیر | توضیح |
+|---|---|---|
+| GET | `/api/cheques?direction=received\|paid&status=overdue\|upcoming` | همه‌ی پرداخت‌های با روش «چک» از فاکتورهای فروش (`direction: "received"` — دریافتی از مشتری) و فاکتورهای خرید (`direction: "paid"` — پرداختی به تامین‌کننده)، به‌همراه شماره صیادی، تاریخ سررسید، کشت و طرف حساب مربوطه. `isOverdue` نشان می‌دهد سررسید گذشته یا نه. پاسخ شامل `totalReceived`, `totalPaid`, `overdueCount` هم هست |
 
 ### مشتریان
 | Method | مسیر | توضیح |

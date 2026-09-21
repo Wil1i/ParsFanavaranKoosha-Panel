@@ -44,7 +44,7 @@ exports.getOne = async (req, res, next) => {
   try {
     const batch = await Batch.findByPk(req.params.id, {
       include: [
-        { model: Purchase, as: "purchases", order: [["date", "DESC"]] },
+        { model: Purchase, as: "purchases", order: [["date", "DESC"]], include: [{ model: Payment, as: "payments" }] },
         { model: Sale, as: "sales", order: [["date", "DESC"]], include: [{ model: Payment, as: "payments" }] },
       ],
     });
@@ -191,7 +191,12 @@ exports.exportSalesExcel = async (req, res, next) => {
       totalPaid += Number(s.paidAmount);
 
       const methodsText = (s.payments || [])
-        .map((p) => `${p.method}: ${Number(p.amount).toLocaleString("fa-IR")}${p.trackingNumber ? ` (پیگیری: ${p.trackingNumber})` : ""}`)
+        .map((p) => {
+          let txt = `${p.method}: ${Number(p.amount).toLocaleString("fa-IR")}`;
+          if (p.trackingNumber) txt += ` (${p.method === "چک" ? "صیادی" : "پیگیری"}: ${p.trackingNumber})`;
+          if (p.method === "چک" && p.dueDate) txt += ` (سررسید: ${p.dueDate})`;
+          return txt;
+        })
         .join(" | ");
 
       const avgWeightPerBlock = s.blockCount ? Number(s.qty) / Number(s.blockCount) : null;
