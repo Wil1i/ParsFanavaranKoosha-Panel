@@ -104,7 +104,7 @@ exports.create = async (req, res, next) => {
     });
 
     if(sms && sms == true){
-      smsUtil.send(process.env.FAKTOR_SMS_CODE, resolved.phone + "", [fmtDate(sale.date), sale.qty + " " + sale.unit + "", sale.total + " تومان", paidAmount.toString()||0 + ' تومان', paidAmount >= 1 ? (sale.total - paidAmount) : 0 + ' تومان'])
+      smsUtil.send(process.env.FAKTOR_SMS_CODE, resolved.phone + "", [fmtDate(sale.date), sale.qty + " " + sale.unit + "", sale.total.toLocaleString() + " تومان", paidAmount.toLocaleString()||0 + ' تومان', paidAmount >= 1 ? (sale.total - paidAmount).toLocaleString() + 'تومان' : 0 + ' تومان'])
     }
 
     const full = await Sale.findByPk(sale.id, { include: [{ model: Payment, as: "payments" }] });
